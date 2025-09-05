@@ -1,0 +1,22 @@
+# Rust/Solana
+target/
+**/*.rs.bk
+
+# Anchor/Arcium
+.anchor/
+.localnet/
+keypair.json
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+tmp/
+temp/

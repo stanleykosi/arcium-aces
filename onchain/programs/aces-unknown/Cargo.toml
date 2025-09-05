@@ -1,0 +1,23 @@
+[package]
+name = "aces-unknown"
+version = "0.1.0"
+description = "Aces Unknown: The Provably Fair Poker Platform"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "aces_unknown"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.29.0"
+anchor-spl = "0.29.0"
+arcium-client = { version = "0.2.0", default-features = false }
+arcium-macros = { version = "0.2.0" }
+arcium-anchor = { version = "0.2.0" }

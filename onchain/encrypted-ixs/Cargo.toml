@@ -1,0 +1,8 @@
+[package]
+name = "encrypted-ixs"
+version = "0.1.0"
+description = "Encrypted instructions for Aces Unknown"
+edition = "2021"
+
+[dependencies]
+arcis-imports = { version = "0.2.0" }

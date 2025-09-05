@@ -1,0 +1,21 @@
+{
+  "name": "aces-unknown-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "onchain"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "start:frontend": "npm run start --workspace=frontend",
+    "lint:frontend": "npm run lint --workspace=frontend",
+    "build:onchain": "cd onchain && arcium build",
+    "test:onchain": "cd onchain && arcium test",
+    "deploy:onchain": "cd onchain && arcium deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
