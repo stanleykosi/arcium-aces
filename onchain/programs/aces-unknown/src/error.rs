@@ -46,6 +46,9 @@ pub enum AcesUnknownErrorCode {
     #[msg("Invalid Game State: The action is not valid in the current game state.")]
     InvalidGameState,
 
+    #[msg("Cannot start hand. The game is already in progress.")]
+    CannotStartHand,
+
     #[msg("Not enough players to start a hand.")]
     NotEnoughPlayers,
 

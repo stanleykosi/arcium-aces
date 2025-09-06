@@ -15,8 +15,16 @@ pub mod join_table;
 pub mod leave_table;
 pub mod update_rake_params;
 
+// Hand lifecycle instructions
+pub mod start_hand;
+pub mod deal_community_cards;
+pub mod resolve_showdown;
+
 // Re-export all public items from the submodules.
 pub use create_table::*;
 pub use join_table::*;
 pub use leave_table::*;
 pub use update_rake_params::*;
+pub use start_hand::*;
+pub use deal_community_cards::*;
+pub use resolve_showdown::*;

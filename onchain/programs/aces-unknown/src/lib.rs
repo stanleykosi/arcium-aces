@@ -11,6 +11,7 @@
 //! framework for confidential computations on Arcium.
 
 use anchor_lang::prelude::*;
+use arcium_anchor::prelude::comp_def_offset;
 
 // Import local modules.
 pub mod state;
@@ -21,6 +22,13 @@ pub mod instructions;
 use state::*;
 use error::*;
 use instructions::*;
+use crate::state::constants::MAX_PLAYERS;
+
+// Arcium Computation Definition Offsets
+// These constants are unique identifiers for each confidential instruction.
+const COMP_DEF_OFFSET_SHUFFLE_AND_DEAL: u32 = comp_def_offset("shuffle_and_deal");
+const COMP_DEF_OFFSET_REVEAL_COMMUNITY_CARDS: u32 = comp_def_offset("reveal_community_cards");
+const COMP_DEF_OFFSET_EVALUATE_HANDS_AND_PAYOUT: u32 = comp_def_offset("evaluate_hands_and_payout");
 
 declare_id!("ACESUnKnOwn111111111111111111111111111111111");
 
@@ -28,14 +36,16 @@ declare_id!("ACESUnKnOwn111111111111111111111111111111111");
 pub mod aces_unknown {
     use super::*;
 
+    // ========================================
+    // Admin & Table Management Instructions
+    // ========================================
+
     /// Initializes a `PlatformConfig` singleton account with the deployer as the admin.
     /// This should be called once after the program is deployed.
     pub fn initialize_platform_config(ctx: Context<InitializePlatformConfig>) -> Result<()> {
         ctx.accounts.platform_config.admin = ctx.accounts.admin.key();
-        // Set default rake: 5% with a cap of 3 Big Blinds (example, can be updated)
-        ctx.accounts.platform_config.rake_bps = 500; // 5.00%
-        // Cap is set later based on table currency, this is a placeholder
-        ctx.accounts.platform_config.rake_max_cap = 0;
+        ctx.accounts.platform_config.rake_bps = 500; // Default 5.00%
+        ctx.accounts.platform_config.rake_max_cap = 0; // Default no cap
         Ok(())
     }
 
@@ -67,6 +77,56 @@ pub mod aces_unknown {
     /// Instruction for a player to leave a table and cash out their chips.
     pub fn leave_table(ctx: Context<LeaveTable>, table_id: u64) -> Result<()> {
         instructions::leave_table(ctx, table_id)
+    }
+
+    // ========================================
+    // Hand Lifecycle Instructions
+    // ========================================
+
+    /// Starts a new hand, collects blinds, and queues the shuffle/deal computation.
+    pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u64, arcium_pubkeys: [[u8; 32]; MAX_PLAYERS]) -> Result<()> {
+        instructions::start_hand(ctx, table_id, computation_offset, arcium_pubkeys)
+    }
+
+    /// Reveals the next community cards (flop, turn, or river).
+    pub fn deal_community_cards(ctx: Context<DealCommunityCards>, table_id: u64, computation_offset: u64) -> Result<()> {
+        instructions::deal_community_cards(ctx, table_id, computation_offset)
+    }
+
+    /// Resolves the showdown, determines the winner, and handles payouts.
+    pub fn resolve_showdown(ctx: Context<ResolveShowdown>, table_id: u64, computation_offset: u64) -> Result<()> {
+        instructions::resolve_showdown(ctx, table_id, computation_offset)
+    }
+
+    // ========================================
+    // Arcium Callbacks
+    // ========================================
+
+    /// Callback for the `start_hand` instruction's `shuffle_and_deal` computation.
+    #[arcium_callback(encrypted_ix = "shuffle_and_deal")]
+    pub fn start_hand_callback(
+        ctx: Context<StartHandCallback>,
+        output: ComputationOutputs<ShuffleAndDealOutput>,
+    ) -> Result<()> {
+        instructions::start_hand_callback(ctx, output)
+    }
+
+    /// Callback for the `deal_community_cards` instruction's `reveal_community_cards` computation.
+    #[arcium_callback(encrypted_ix = "reveal_community_cards")]
+    pub fn deal_community_cards_callback(
+        ctx: Context<DealCommunityCardsCallback>,
+        output: ComputationOutputs<RevealCommunityCardsOutput>,
+    ) -> Result<()> {
+        instructions::deal_community_cards_callback(ctx, output)
+    }
+
+    /// Callback for the `resolve_showdown` instruction's `evaluate_hands_and_payout` computation.
+    #[arcium_callback(encrypted_ix = "evaluate_hands_and_payout")]
+    pub fn resolve_showdown_callback(
+        ctx: Context<ResolveShowdownCallback>,
+        output: ComputationOutputs<EvaluateHandsAndPayoutOutput>,
+    ) -> Result<()> {
+        instructions::resolve_showdown_callback(ctx, output)
     }
 }
 
