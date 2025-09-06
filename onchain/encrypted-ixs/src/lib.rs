@@ -29,8 +29,9 @@ mod confidential_instructions {
     use arcis_imports::*;
     use crate::types::*;
 
-    // By using `use`, we bring the `shuffle_and_deal` instruction into this `#[encrypted]`
-    // module, making it visible to the Arcis compiler. All future circuits will be
+    // By using `use`, we bring the instructions into this `#[encrypted]`
+    // module, making them visible to the Arcis compiler. All future circuits will be
     // imported and exposed here.
     use crate::circuits::shuffle_and_deal::shuffle_and_deal;
+    use crate::circuits::reveal_community_cards::reveal_community_cards;
 }

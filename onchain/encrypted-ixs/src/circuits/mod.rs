@@ -8,5 +8,7 @@
 //! @modules
 //! - `shuffle_and_deal`: Contains the circuit for securely shuffling the deck
 //!   and dealing encrypted hole cards to players.
+//! - `reveal_community_cards`: Contains the circuit for revealing the flop, turn, and river.
 
 pub mod shuffle_and_deal;
+pub mod reveal_community_cards;
