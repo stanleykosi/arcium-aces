@@ -50,6 +50,7 @@ pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u6
     table.current_bet = 0;
     table.community_cards = [None; 5];
     table.hand_id_counter = table.hand_id_counter.checked_add(1).unwrap();
+    table.last_aggressor_position = 0; // Reset for new hand
 
     for seat in table.seats.iter_mut() {
         if let Some(player) = seat {

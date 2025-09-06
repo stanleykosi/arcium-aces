@@ -20,6 +20,11 @@ pub mod start_hand;
 pub mod deal_community_cards;
 pub mod resolve_showdown;
 
+// Player actions and safety mechanisms
+pub mod player_action;
+pub mod force_player_fold;
+pub mod force_hand_refund;
+
 // Re-export all public items from the submodules.
 pub use create_table::*;
 pub use join_table::*;
@@ -28,3 +33,6 @@ pub use update_rake_params::*;
 pub use start_hand::*;
 pub use deal_community_cards::*;
 pub use resolve_showdown::*;
+pub use player_action::*;
+pub use force_player_fold::*;
+pub use force_hand_refund::*;

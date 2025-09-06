@@ -56,6 +56,9 @@ pub struct Table {
     pub turn_duration_seconds: u32,
     /// A counter for the number of hands played at this table, used to create unique hand IDs.
     pub hand_id_counter: u64,
+    /// The index of the player who made the last aggressive action (bet or raise) in the current round.
+    /// This is used to determine when a betting round is complete.
+    pub last_aggressor_position: u8,
 }
 
 /// Contains the state for a single player seated at a table.
@@ -91,4 +94,15 @@ pub enum BettingRound {
     Turn,
     River,
     Showdown,
+}
+
+/// Enum representing the possible actions a player can take.
+/// This enum is passed as an argument to the `player_action` instruction.
+#[derive(InitSpace, AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlayerAction {
+    Fold,
+    Check,
+    Call,
+    Bet { amount: u64 },
+    Raise { amount: u64 },
 }

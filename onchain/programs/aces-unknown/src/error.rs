@@ -58,6 +58,9 @@ pub enum AcesUnknownErrorCode {
     #[msg("Turn timer has expired.")]
     TurnTimerExpired,
 
+    #[msg("Turn timer has not yet expired.")]
+    TurnNotExpired,
+
     #[msg("Invalid Action: The attempted move is not allowed.")]
     InvalidAction,
 
@@ -69,6 +72,9 @@ pub enum AcesUnknownErrorCode {
 
     #[msg("Insufficient funds to perform this action.")]
     InsufficientFunds,
+
+    #[msg("Hand is not in a stuck state. Cannot force refund.")]
+    HandNotStuck,
 
     // ========================================
     // Arcium & Computation Errors

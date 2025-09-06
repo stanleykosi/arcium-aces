@@ -55,7 +55,7 @@ pub mod aces_unknown {
         new_rake_bps: u16,
         new_rake_max_cap: u64,
     ) -> Result<()> {
-        instructions::update_rake_params(ctx, new_rake_bps, new_rake_max_cap)
+        instructions::update_rake_params::update_rake_params(ctx, new_rake_bps, new_rake_max_cap)
     }
 
     /// Instruction for a player to create a new poker table.
@@ -66,17 +66,17 @@ pub mod aces_unknown {
         big_blind: u64,
         buy_in: u64,
     ) -> Result<()> {
-        instructions::create_table(ctx, table_id, small_blind, big_blind, buy_in)
+        instructions::create_table::create_table(ctx, table_id, small_blind, big_blind, buy_in)
     }
 
     /// Instruction for a player to join an existing table.
     pub fn join_table(ctx: Context<JoinTable>, table_id: u64, buy_in: u64) -> Result<()> {
-        instructions::join_table(ctx, table_id, buy_in)
+        instructions::join_table::join_table(ctx, table_id, buy_in)
     }
 
     /// Instruction for a player to leave a table and cash out their chips.
     pub fn leave_table(ctx: Context<LeaveTable>, table_id: u64) -> Result<()> {
-        instructions::leave_table(ctx, table_id)
+        instructions::leave_table::leave_table(ctx, table_id)
     }
 
     // ========================================
@@ -85,18 +85,38 @@ pub mod aces_unknown {
 
     /// Starts a new hand, collects blinds, and queues the shuffle/deal computation.
     pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u64, arcium_pubkeys: [[u8; 32]; MAX_PLAYERS]) -> Result<()> {
-        instructions::start_hand(ctx, table_id, computation_offset, arcium_pubkeys)
+        instructions::start_hand::start_hand(ctx, table_id, computation_offset, arcium_pubkeys)
     }
 
     /// Reveals the next community cards (flop, turn, or river).
     pub fn deal_community_cards(ctx: Context<DealCommunityCards>, table_id: u64, computation_offset: u64) -> Result<()> {
-        instructions::deal_community_cards(ctx, table_id, computation_offset)
+        instructions::deal_community_cards::deal_community_cards(ctx, table_id, computation_offset)
     }
 
     /// Resolves the showdown, determines the winner, and handles payouts.
     pub fn resolve_showdown(ctx: Context<ResolveShowdown>, table_id: u64, computation_offset: u64) -> Result<()> {
-        instructions::resolve_showdown(ctx, table_id, computation_offset)
+        instructions::resolve_showdown::resolve_showdown(ctx, table_id, computation_offset)
     }
+    
+    // ========================================
+    // Player Action & Timeout Instructions
+    // ========================================
+    
+    /// The main instruction for a player to take an action (fold, check, call, bet, raise).
+    pub fn player_action(ctx: Context<PlayerActionAccounts>, table_id: u64, action: PlayerAction) -> Result<()> {
+        instructions::player_action::player_action(ctx, table_id, action)
+    }
+
+    /// Instruction for anyone to fold a player whose turn timer has expired.
+    pub fn force_player_fold(ctx: Context<ForcePlayerFold>, table_id: u64) -> Result<()> {
+        instructions::force_player_fold::force_player_fold(ctx, table_id)
+    }
+
+    /// Safety instruction to refund all bets if a hand becomes unrecoverably stuck.
+    pub fn force_hand_refund(ctx: Context<ForceHandRefund>, table_id: u64) -> Result<()> {
+        instructions::force_hand_refund::force_hand_refund(ctx, table_id)
+    }
+
 
     // ========================================
     // Arcium Callbacks

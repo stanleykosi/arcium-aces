@@ -142,6 +142,7 @@ pub fn deal_community_cards_callback(
         next_player_pos = (next_player_pos + 1) % crate::state::constants::MAX_PLAYERS as u8;
     }
     table.turn_position = next_player_pos;
+    table.last_aggressor_position = next_player_pos; // Initialize for new betting round
     table.turn_started_at = Clock::get()?.unix_timestamp;
     
     emit!(CommunityCardsDealt {
