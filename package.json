@@ -2,20 +2,22 @@
   "name": "aces-unknown-monorepo",
   "version": "1.0.0",
   "private": true,
-  "workspaces": [
-    "frontend",
-    "onchain"
-  ],
   "scripts": {
-    "dev:frontend": "npm run dev --workspace=frontend",
-    "build:frontend": "npm run build --workspace=frontend",
-    "start:frontend": "npm run start --workspace=frontend",
-    "lint:frontend": "npm run lint --workspace=frontend",
+    "dev:frontend": "pnpm run dev --filter frontend",
+    "build:frontend": "pnpm run build --filter frontend",
+    "start:frontend": "pnpm run start --filter frontend",
+    "lint:frontend": "pnpm run lint --filter frontend",
     "build:onchain": "cd onchain && arcium build",
     "test:onchain": "cd onchain && arcium test",
     "deploy:onchain": "cd onchain && arcium deploy"
   },
   "devDependencies": {
+    "esbuild": "^0.25.9",
     "typescript": "^5.4.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.25.9"
+    }
   }
 }
