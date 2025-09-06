@@ -30,7 +30,7 @@ const COMP_DEF_OFFSET_SHUFFLE_AND_DEAL: u32 = comp_def_offset("shuffle_and_deal"
 const COMP_DEF_OFFSET_REVEAL_COMMUNITY_CARDS: u32 = comp_def_offset("reveal_community_cards");
 const COMP_DEF_OFFSET_EVALUATE_HANDS_AND_PAYOUT: u32 = comp_def_offset("evaluate_hands_and_payout");
 
-declare_id!("ACESUnKnOwn111111111111111111111111111111111");
+declare_id!("8aftkGgLGF2LWDPbvzdJSYwFPoYCxdhk25HAwMAopygZ");
 
 #[program]
 pub mod aces_unknown {
@@ -103,7 +103,7 @@ pub mod aces_unknown {
     // ========================================
     
     /// The main instruction for a player to take an action (fold, check, call, bet, raise).
-    pub fn player_action(ctx: Context<PlayerActionAccounts>, table_id: u64, action: PlayerAction) -> Result<()> {
+    pub fn player_action(ctx: Context<PlayerActionAccounts>, table_id: u64, action: crate::state::PlayerAction) -> Result<()> {
         instructions::player_action::player_action(ctx, table_id, action)
     }
 
@@ -123,7 +123,7 @@ pub mod aces_unknown {
     // ========================================
 
     /// Callback for the `start_hand` instruction's `shuffle_and_deal` computation.
-    #[arcium_callback(encrypted_ix = "shuffle_and_deal")]
+    // #[arcium_callback(encrypted_ix = "shuffle_and_deal")]
     pub fn start_hand_callback(
         ctx: Context<StartHandCallback>,
         output: ComputationOutputs<ShuffleAndDealOutput>,
@@ -132,7 +132,7 @@ pub mod aces_unknown {
     }
 
     /// Callback for the `deal_community_cards` instruction's `reveal_community_cards` computation.
-    #[arcium_callback(encrypted_ix = "reveal_community_cards")]
+    // #[arcium_callback(encrypted_ix = "reveal_community_cards")]
     pub fn deal_community_cards_callback(
         ctx: Context<DealCommunityCardsCallback>,
         output: ComputationOutputs<RevealCommunityCardsOutput>,
@@ -141,7 +141,7 @@ pub mod aces_unknown {
     }
 
     /// Callback for the `resolve_showdown` instruction's `evaluate_hands_and_payout` computation.
-    #[arcium_callback(encrypted_ix = "evaluate_hands_and_payout")]
+    // #[arcium_callback(encrypted_ix = "evaluate_hands_and_payout")]
     pub fn resolve_showdown_callback(
         ctx: Context<ResolveShowdownCallback>,
         output: ComputationOutputs<EvaluateHandsAndPayoutOutput>,

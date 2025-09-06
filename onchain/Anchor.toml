@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-aces_unknown = "ACESUnKnOwn111111111111111111111111111111111"
+aces_unknown = "8aftkGgLGF2LWDPbvzdJSYwFPoYCxdhk25HAwMAopygZ"
 
 [registry]
 url = "https://api.apr.dev"
