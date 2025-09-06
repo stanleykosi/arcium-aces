@@ -24,7 +24,6 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::{
-    associated_token::AssociatedToken,
     token::{self, Mint, Token, TokenAccount, Transfer},
 };
 use crate::state::{BettingRound, GameState, PlayerInfo, Table, PlatformConfig};
@@ -67,7 +66,7 @@ pub fn create_table(
     table.turn_duration_seconds = 30; // Default turn duration
 
     // Seat the creator at the first position
-    let mut seats = Vec::with_capacity(MAX_PLAYERS);
+    let mut seats = [None; MAX_PLAYERS];
     let creator_info = PlayerInfo {
         pubkey: ctx.accounts.creator.key(),
         stack: buy_in,
@@ -76,11 +75,7 @@ pub fn create_table(
         bet_this_round: 0,
         total_bet_this_hand: 0,
     };
-    seats.push(Some(creator_info));
-    // Fill the rest of the seats with None
-    for _ in 1..MAX_PLAYERS {
-        seats.push(None);
-    }
+    seats[0] = Some(creator_info);
     table.seats = seats;
 
     table.player_count = 1;

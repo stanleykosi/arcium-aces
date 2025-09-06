@@ -24,11 +24,14 @@
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::CallbackAccount;
+use arcium_client::idl::arcium::accounts::Cluster;
+use arcium_client::idl::arcium::ID_CONST;
 use crate::state::{Table, HandData, GameState, BettingRound, Card};
 use crate::error::AcesUnknownErrorCode;
+use crate::ID;
 
 /// Instruction logic for dealing community cards.
-pub fn deal_community_cards(ctx: Context<DealCommunityCards>, table_id: u64, computation_offset: u64) -> Result<()> {
+pub fn deal_community_cards(ctx: Context<DealCommunityCards>, _table_id: u64, computation_offset: u64) -> Result<()> {
     let table = &ctx.accounts.table;
 
     // --- Validation ---
@@ -58,16 +61,15 @@ pub fn deal_community_cards(ctx: Context<DealCommunityCards>, table_id: u64, com
 
     // --- Queue Arcium Computation ---
     // The offset to `encrypted_deck_ciphertexts` within `HandData` account data.
-    // 8 (disc) + 32 (table_pubkey) + 8 (hand_id) + 32 (shuffle_commitment) = 80
     const DECK_CIPHERTEXTS_OFFSET: u16 = 80;
     const DECK_CIPHERTEXTS_LEN: u32 = 32 * 3; // 3 ciphertexts, 32 bytes each
 
-    let args = vec![
-        Argument::PlaintextU128(ctx.accounts.hand_data.encrypted_deck_nonce),
-        Argument::Account(ctx.accounts.hand_data.key(), DECK_CIPHERTEXTS_OFFSET, DECK_CIPHERTEXTS_LEN),
-        Argument::PlaintextU8(deck_top_card_idx),
-        Argument::PlaintextU8(num_cards_to_reveal),
-    ];
+    // Use a more memory-efficient approach to avoid stack overflow
+    let mut args = Vec::with_capacity(4); // Pre-allocate with exact capacity needed
+    args.push(Argument::PlaintextU128(ctx.accounts.hand_data.encrypted_deck_nonce));
+    args.push(Argument::Account(ctx.accounts.hand_data.key(), DECK_CIPHERTEXTS_OFFSET as u32, DECK_CIPHERTEXTS_LEN));
+    args.push(Argument::PlaintextU8(deck_top_card_idx));
+    args.push(Argument::PlaintextU8(num_cards_to_reveal));
 
     queue_computation(
         ctx.accounts,
@@ -84,8 +86,8 @@ pub fn deal_community_cards(ctx: Context<DealCommunityCards>, table_id: u64, com
 }
 
 /// Callback logic for `deal_community_cards`.
-#[arcium_callback(encrypted_ix = "reveal_community_cards")]
-pub fn deal_community_cards_callback(
+// #[arcium_callback(encrypted_ix = "reveal_community_cards")]
+pub fn reveal_community_cards_callback(
     ctx: Context<DealCommunityCardsCallback>,
     output: ComputationOutputs<RevealCommunityCardsOutput>,
 ) -> Result<()> {
@@ -109,11 +111,13 @@ pub fn deal_community_cards_callback(
         community_card_idx += 1;
     }
 
-    for card_index in revealed_card_indices.iter() {
-        if *card_index != 255 && community_card_idx < 5 { // 255 is INVALID_CARD_INDEX
+    for card_index_bytes in revealed_card_indices.ciphertexts.iter() {
+        // Extract the first byte as the card index
+        let card_index = card_index_bytes[0];
+        if card_index != 255 && community_card_idx < 5 { // 255 is INVALID_CARD_INDEX
             table.community_cards[community_card_idx] = Some(Card {
-                rank: *card_index % 13,
-                suit: *card_index / 13,
+                rank: card_index % 13,
+                suit: card_index / 13,
             });
             community_card_idx += 1;
         }
@@ -154,6 +158,7 @@ pub fn deal_community_cards_callback(
     Ok(())
 }
 
+#[queue_computation_accounts("reveal_community_cards", payer)]
 #[derive(Accounts)]
 #[instruction(table_id: u64, computation_offset: u64)]
 pub struct DealCommunityCards<'info> {
@@ -186,13 +191,14 @@ pub struct DealCommunityCards<'info> {
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_comp_def_pda!(crate::COMP_DEF_OFFSET_REVEAL_COMMUNITY_CARDS))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
-    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    #[account(mut)]
     pub cluster_account: Account<'info, Cluster>,
     #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
     pub pool_account: Account<'info, FeePool>,
     #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
     pub clock_account: Account<'info, ClockAccount>,
     pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
 }
 
 #[callback_accounts("reveal_community_cards", payer)]

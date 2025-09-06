@@ -26,8 +26,7 @@ pub struct Table {
     /// The public key of the platform admin, copied from `PlatformConfig` on creation.
     pub admin: Pubkey,
     /// An array representing the seats at the table. `None` signifies an empty seat.
-    #[max_len(MAX_PLAYERS)]
-    pub seats: Vec<Option<PlayerInfo>>,
+    pub seats: [Option<PlayerInfo>; MAX_PLAYERS],
     /// The number of players currently seated at the table.
     pub player_count: u8,
     /// The index in the `seats` array corresponding to the player with the dealer button.

@@ -11,6 +11,7 @@
 //! framework for confidential computations on Arcium.
 
 use anchor_lang::prelude::*;
+use arcium_anchor::prelude::*;
 use arcium_anchor::prelude::comp_def_offset;
 
 // Import local modules.
@@ -20,9 +21,7 @@ pub mod instructions;
 
 // Make their contents available for the program.
 use state::*;
-use error::*;
 use instructions::*;
-use crate::state::constants::MAX_PLAYERS;
 
 // Arcium Computation Definition Offsets
 // These constants are unique identifiers for each confidential instruction.
@@ -30,9 +29,10 @@ const COMP_DEF_OFFSET_SHUFFLE_AND_DEAL: u32 = comp_def_offset("shuffle_and_deal"
 const COMP_DEF_OFFSET_REVEAL_COMMUNITY_CARDS: u32 = comp_def_offset("reveal_community_cards");
 const COMP_DEF_OFFSET_EVALUATE_HANDS_AND_PAYOUT: u32 = comp_def_offset("evaluate_hands_and_payout");
 
+// Program ID
 declare_id!("8aftkGgLGF2LWDPbvzdJSYwFPoYCxdhk25HAwMAopygZ");
 
-#[program]
+#[arcium_program]
 pub mod aces_unknown {
     use super::*;
 
@@ -46,6 +46,7 @@ pub mod aces_unknown {
         ctx.accounts.platform_config.admin = ctx.accounts.admin.key();
         ctx.accounts.platform_config.rake_bps = 500; // Default 5.00%
         ctx.accounts.platform_config.rake_max_cap = 0; // Default no cap
+        ctx.accounts.platform_config.treasury_vault = ctx.accounts.treasury_vault.key();
         Ok(())
     }
 
@@ -84,7 +85,7 @@ pub mod aces_unknown {
     // ========================================
 
     /// Starts a new hand, collects blinds, and queues the shuffle/deal computation.
-    pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u64, arcium_pubkeys: [[u8; 32]; MAX_PLAYERS]) -> Result<()> {
+    pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u64, arcium_pubkeys: [u8; 32]) -> Result<()> {
         instructions::start_hand::start_hand(ctx, table_id, computation_offset, arcium_pubkeys)
     }
 
@@ -124,29 +125,29 @@ pub mod aces_unknown {
 
     /// Callback for the `start_hand` instruction's `shuffle_and_deal` computation.
     // #[arcium_callback(encrypted_ix = "shuffle_and_deal")]
-    pub fn start_hand_callback(
+    pub fn shuffle_and_deal_callback(
         ctx: Context<StartHandCallback>,
         output: ComputationOutputs<ShuffleAndDealOutput>,
     ) -> Result<()> {
-        instructions::start_hand_callback(ctx, output)
+        instructions::shuffle_and_deal_callback(ctx, output)
     }
 
     /// Callback for the `deal_community_cards` instruction's `reveal_community_cards` computation.
     // #[arcium_callback(encrypted_ix = "reveal_community_cards")]
-    pub fn deal_community_cards_callback(
+    pub fn reveal_community_cards_callback(
         ctx: Context<DealCommunityCardsCallback>,
         output: ComputationOutputs<RevealCommunityCardsOutput>,
     ) -> Result<()> {
-        instructions::deal_community_cards_callback(ctx, output)
+        instructions::reveal_community_cards_callback(ctx, output)
     }
 
     /// Callback for the `resolve_showdown` instruction's `evaluate_hands_and_payout` computation.
     // #[arcium_callback(encrypted_ix = "evaluate_hands_and_payout")]
-    pub fn resolve_showdown_callback(
+    pub fn evaluate_hands_and_payout_callback(
         ctx: Context<ResolveShowdownCallback>,
         output: ComputationOutputs<EvaluateHandsAndPayoutOutput>,
     ) -> Result<()> {
-        instructions::resolve_showdown_callback(ctx, output)
+        instructions::evaluate_hands_and_payout_callback(ctx, output)
     }
 }
 
@@ -163,5 +164,7 @@ pub struct InitializePlatformConfig<'info> {
     pub platform_config: Account<'info, PlatformConfig>,
     #[account(mut)]
     pub admin: Signer<'info>,
+    /// CHECK: Treasury vault account for platform rake collection
+    pub treasury_vault: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }

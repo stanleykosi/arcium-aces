@@ -27,12 +27,19 @@
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::CallbackAccount;
-use crate::state::{Table, HandData, GameState, PlayerInfo, EncryptedHandInfo};
+use arcium_client::idl::arcium::accounts::Cluster;
+use arcium_client::idl::arcium::ID_CONST;
+use crate::state::{Table, HandData, GameState, EncryptedHandInfo};
 use crate::error::AcesUnknownErrorCode;
 use crate::state::constants::MAX_PLAYERS;
+use crate::ID;
 
 /// Instruction logic for starting a new hand.
-pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u64, arcium_pubkeys: [[u8; 32]; MAX_PLAYERS]) -> Result<()> {
+pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u64, arcium_pubkeys: [u8; 32]) -> Result<()> {
+    // Extract keys before any mutable borrows
+    let table_key = ctx.accounts.table.key();
+    let hand_data_key = ctx.accounts.hand_data.key();
+    
     let table = &mut ctx.accounts.table;
 
     // --- Validation ---
@@ -72,9 +79,13 @@ pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u6
     let (sb_pos, bb_pos, first_to_act_pos) = find_blinds_and_first_actor(table)?;
     
     // --- Collect Blinds ---
+    // Extract table values first to avoid borrow conflicts
+    let small_blind = table.small_blind;
+    let big_blind = table.big_blind;
+    
     // Small Blind
     let sb_player = table.seats[sb_pos as usize].as_mut().unwrap();
-    let sb_amount = std::cmp::min(table.small_blind, sb_player.stack);
+    let sb_amount = std::cmp::min(small_blind, sb_player.stack);
     sb_player.stack -= sb_amount;
     sb_player.total_bet_this_hand += sb_amount;
     sb_player.bet_this_round += sb_amount;
@@ -82,38 +93,45 @@ pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u6
 
     // Big Blind
     let bb_player = table.seats[bb_pos as usize].as_mut().unwrap();
-    let bb_amount = std::cmp::min(table.big_blind, bb_player.stack);
+    let bb_amount = std::cmp::min(big_blind, bb_player.stack);
     bb_player.stack -= bb_amount;
     bb_player.total_bet_this_hand += bb_amount;
     bb_player.bet_this_round += bb_amount;
     table.pot += bb_amount;
 
-    table.current_bet = table.big_blind;
+    table.current_bet = big_blind;
     
     // --- Queue Arcium Computation ---
-    let mut active_players_mask = [false; MAX_PLAYERS];
-    for (i, seat) in table.seats.iter().enumerate() {
-        if seat.is_some() {
-            active_players_mask[i] = true;
-        }
+    // Use a more memory-efficient approach to avoid stack overflow
+    let mut args = Vec::with_capacity(32 + MAX_PLAYERS); // Pre-allocate with reasonable capacity
+    
+    // Add arcium pubkey as individual u8 values
+    for byte in arcium_pubkeys.iter() {
+        args.push(Argument::PlaintextU8(*byte));
+    }
+    
+    // Add active players mask as individual bool values
+    for i in 0..MAX_PLAYERS {
+        let is_active = table.seats[i].is_some();
+        args.push(Argument::PlaintextBool(is_active));
     }
 
-    let args = vec![
-        Argument::ArciumPubkeys(arcium_pubkeys),
-        Argument::PlaintextBools(active_players_mask.to_vec()),
-    ];
-
+    // Drop the mutable borrow before calling queue_computation
+    let _ = table;
+    
     queue_computation(
         ctx.accounts,
         computation_offset,
         args,
         vec![
-            CallbackAccount { pubkey: ctx.accounts.table.key(), is_writable: true },
-            CallbackAccount { pubkey: ctx.accounts.hand_data.key(), is_writable: true },
+            CallbackAccount { pubkey: table_key, is_writable: true },
+            CallbackAccount { pubkey: hand_data_key, is_writable: true },
         ],
         None,
     )?;
 
+    // Re-borrow table after queue_computation
+    let table = &mut ctx.accounts.table;
     table.turn_position = first_to_act_pos;
     table.turn_started_at = Clock::get()?.unix_timestamp;
 
@@ -122,14 +140,15 @@ pub fn start_hand(ctx: Context<StartHand>, table_id: u64, computation_offset: u6
 
 /// Helper function to find blind and first actor positions.
 fn find_blinds_and_first_actor(table: &Account<Table>) -> Result<(u8, u8, u8)> {
-    let mut active_indices = Vec::new();
+    let mut active_indices = [0u8; MAX_PLAYERS];
+    let mut num_active = 0;
     for i in 0..MAX_PLAYERS {
         if table.seats[i].is_some() {
-            active_indices.push(i as u8);
+            active_indices[num_active] = i as u8;
+            num_active += 1;
         }
     }
-    let num_active = active_indices.len();
-    let dealer_idx_in_active = active_indices.iter().position(|&p| p == table.dealer_position).unwrap();
+    let dealer_idx_in_active = active_indices[..num_active].iter().position(|&p| p == table.dealer_position).unwrap();
     
     if num_active == 2 { // Heads-up case
         let sb_pos = table.dealer_position;
@@ -145,8 +164,8 @@ fn find_blinds_and_first_actor(table: &Account<Table>) -> Result<(u8, u8, u8)> {
 
 
 /// Callback logic for the `start_hand` instruction.
-#[arcium_callback(encrypted_ix = "shuffle_and_deal")]
-pub fn start_hand_callback(
+// #[arcium_callback(encrypted_ix = "shuffle_and_deal")]
+pub fn shuffle_and_deal_callback(
     ctx: Context<StartHandCallback>,
     output: ComputationOutputs<ShuffleAndDealOutput>,
 ) -> Result<()> {
@@ -163,23 +182,24 @@ pub fn start_hand_callback(
     let hand_data = &mut ctx.accounts.hand_data;
     hand_data.table_pubkey = ctx.accounts.table.key();
     hand_data.hand_id = ctx.accounts.table.hand_id_counter;
-    hand_data.shuffle_commitment = shuffle_commitment;
+    hand_data.shuffle_commitment = shuffle_commitment.ciphertexts[0];
     hand_data.encrypted_deck_ciphertexts = encrypted_deck.ciphertexts;
     hand_data.encrypted_deck_nonce = encrypted_deck.nonce;
     
-    let mut encrypted_hands_for_storage = [None; MAX_PLAYERS];
+    // Process encrypted hands more efficiently to reduce stack usage
     for i in 0..MAX_PLAYERS {
         if let Some(player_info) = &ctx.accounts.table.seats[i] {
-            let arcium_hand = encrypted_hands_from_arcium[i];
-            encrypted_hands_for_storage[i] = Some(EncryptedHandInfo {
+            let arcium_hand = &encrypted_hands_from_arcium[i];
+            hand_data.encrypted_hands[i] = Some(EncryptedHandInfo {
                 player: player_info.pubkey,
                 ciphertext: arcium_hand.ciphertexts[0],
                 nonce: arcium_hand.nonce,
                 encryption_key: arcium_hand.encryption_key,
             });
+        } else {
+            hand_data.encrypted_hands[i] = None;
         }
     }
-    hand_data.encrypted_hands = encrypted_hands_for_storage;
 
     // --- Update Table Account ---
     let table = &mut ctx.accounts.table;
@@ -196,6 +216,7 @@ pub fn start_hand_callback(
     Ok(())
 }
 
+#[queue_computation_accounts("shuffle_and_deal", payer)]
 #[derive(Accounts)]
 #[instruction(table_id: u64, computation_offset: u64)]
 pub struct StartHand<'info> {
@@ -232,7 +253,7 @@ pub struct StartHand<'info> {
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_comp_def_pda!(crate::COMP_DEF_OFFSET_SHUFFLE_AND_DEAL))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
-    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    #[account(mut)]
     pub cluster_account: Account<'info, Cluster>,
     #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
     pub pool_account: Account<'info, FeePool>,

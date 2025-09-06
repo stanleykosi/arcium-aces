@@ -6,6 +6,8 @@ resolver = "2"
 overflow-checks = true
 lto = "fat"
 codegen-units = 1
+opt-level = "z"  # Optimize for size
+strip = "debuginfo"  # Strip debug info
 
 [profile.release.build-override]
 opt-level = 3

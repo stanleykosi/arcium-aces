@@ -28,4 +28,7 @@ pub struct PlatformConfig {
     /// The maximum amount of rake that can be taken from a single pot,
     /// expressed in the smallest denomination of the table's currency (e.g., lamports for SOL).
     pub rake_max_cap: u64,
+    
+    /// The treasury vault account where platform rake is collected.
+    pub treasury_vault: Pubkey,
 }

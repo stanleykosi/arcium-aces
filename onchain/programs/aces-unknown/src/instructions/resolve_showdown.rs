@@ -27,14 +27,17 @@
 //!    `HandData` account to refund the rent.
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use arcium_anchor::prelude::*;
 use arcium_client::idl::arcium::types::CallbackAccount;
-use crate::state::{Table, HandData, GameState, BettingRound, PlayerInfo, PlatformConfig};
+use arcium_client::idl::arcium::accounts::Cluster;
+use arcium_client::idl::arcium::ID_CONST;
+use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use crate::state::{Table, HandData, GameState, BettingRound, PlatformConfig};
 use crate::error::AcesUnknownErrorCode;
 use crate::state::constants::MAX_PLAYERS;
+use crate::ID;
 
-pub fn resolve_showdown(ctx: Context<ResolveShowdown>, table_id: u64, computation_offset: u64) -> Result<()> {
+pub fn resolve_showdown(ctx: Context<ResolveShowdown>, _table_id: u64, computation_offset: u64) -> Result<()> {
     let table = &ctx.accounts.table;
     let hand_data = &ctx.accounts.hand_data;
 
@@ -62,27 +65,34 @@ pub fn resolve_showdown(ctx: Context<ResolveShowdown>, table_id: u64, computatio
     require!(betting_round_complete, AcesUnknownErrorCode::InvalidGameState);
 
     // --- Prepare Args for Arcium ---
-    let mut player_bets = [0u64; MAX_PLAYERS];
-    let mut active_players = [false; MAX_PLAYERS];
-    let mut player_pubkeys = [[0u8; 32]; MAX_PLAYERS]; // Placeholder for ArcisPublicKey
+    // Use a more memory-efficient approach to avoid stack overflow
+    let mut args = Vec::with_capacity(10 + MAX_PLAYERS * 4); // Pre-allocate with reasonable capacity
     
-    for i in 0..MAX_PLAYERS {
-        if let Some(player) = &table.seats[i] {
-            player_bets[i] = player.total_bet_this_hand;
-            active_players[i] = player.is_active_in_hand;
-            // The client will need to provide the Arcium pubkeys. Here we just prepare the structure.
-            // For the test, we'll pass in dummy keys for non-players.
-        }
+    // Add community cards indices as individual u8 values
+    for i in 0..5 {
+        let index = table.community_cards[i].map_or(255, |c| c.rank + c.suit * 13); // 255 as invalid
+        args.push(Argument::PlaintextU8(index));
     }
-
-    let community_cards_indices: [u8; 5] = core::array::from_fn(|i| {
-        table.community_cards[i].map_or(255, |c| c.rank + c.suit * 13) // 255 as invalid
-    });
+    
+    // Add player bets and active players as individual values
+    for i in 0..MAX_PLAYERS {
+        let (bet, is_active) = if let Some(player) = &table.seats[i] {
+            (player.total_bet_this_hand, player.is_active_in_hand)
+        } else {
+            (0u64, false)
+        };
+        args.push(Argument::PlaintextU64(bet));
+        args.push(Argument::PlaintextBool(is_active));
+    }
+    
+    // Add player pubkey as individual u8 values (placeholder)
+    for _ in 0..32 {
+        args.push(Argument::PlaintextU8(0));
+    }
     
     // We need to pass the encrypted hands as arguments. We will pass them as Account references
     // to avoid transaction size limits. We need to calculate offsets.
-    let mut encrypted_hands_args: Vec<Argument> = Vec::new();
-    const HAND_INFO_SIZE: u16 = 32 + 32 + 128/8 + 32; // pubkey, ciphertext, nonce, encryption_key
+    const HAND_INFO_SIZE: u32 = 32 + 32 + 128/8 + 32; // pubkey, ciphertext, nonce, encryption_key
     const ENCRYPTED_HANDS_OFFSET: u16 = 8 // discriminator
         + 32 // table_pubkey
         + 8 // hand_id
@@ -93,28 +103,19 @@ pub fn resolve_showdown(ctx: Context<ResolveShowdown>, table_id: u64, computatio
     for i in 0..MAX_PLAYERS {
          // Add nonce and pubkey for Shared encryption
         if let Some(hand_info) = &hand_data.encrypted_hands[i] {
-            encrypted_hands_args.push(Argument::ArcisPubkey(hand_info.encryption_key));
-            encrypted_hands_args.push(Argument::PlaintextU128(hand_info.nonce));
+            args.push(Argument::ArcisPubkey(hand_info.encryption_key));
+            args.push(Argument::PlaintextU128(hand_info.nonce));
         } else {
              // Dummy values for inactive players
-            encrypted_hands_args.push(Argument::ArcisPubkey([0u8; 32]));
-            encrypted_hands_args.push(Argument::PlaintextU128(0));
+            args.push(Argument::ArcisPubkey([0u8; 32]));
+            args.push(Argument::PlaintextU128(0));
         }
         
-        let offset = ENCRYPTED_HANDS_OFFSET + (i as u16 * (1 + HAND_INFO_SIZE)); // 1 for Option
+        let offset = ENCRYPTED_HANDS_OFFSET as u32 + (i as u32 * (1 + HAND_INFO_SIZE)); // 1 for Option
         // We only care about the ciphertext part of the EncryptedHandInfo struct.
         let ciphertext_offset = offset + 1 + 32; // 1 for Option, 32 for pubkey
-        encrypted_hands_args.push(Argument::Account(ctx.accounts.hand_data.key(), ciphertext_offset, 32));
+        args.push(Argument::Account(ctx.accounts.hand_data.key(), ciphertext_offset as u32, 32));
     }
-    
-    let mut args = vec![
-        Argument::PlaintextU8s(community_cards_indices.to_vec()),
-        Argument::PlaintextU64s(player_bets.to_vec()),
-        Argument::PlaintextBools(active_players.to_vec()),
-        // Placeholder for ArcisPublicKeys
-        Argument::PlaintextU8s(player_pubkeys.iter().flatten().map(|b| *b).collect()),
-    ];
-    args.extend(encrypted_hands_args);
 
 
     queue_computation(
@@ -134,8 +135,8 @@ pub fn resolve_showdown(ctx: Context<ResolveShowdown>, table_id: u64, computatio
     Ok(())
 }
 
-#[arcium_callback(encrypted_ix = "evaluate_hands_and_payout")]
-pub fn resolve_showdown_callback(
+// #[arcium_callback(encrypted_ix = "evaluate_hands_and_payout")]
+pub fn evaluate_hands_and_payout_callback(
     ctx: Context<ResolveShowdownCallback>,
     output: ComputationOutputs<EvaluateHandsAndPayoutOutput>,
 ) -> Result<()> {
@@ -159,7 +160,7 @@ pub fn resolve_showdown_callback(
     // --- Transfer Rake ---
     if rake_amount > 0 {
         let table_key = table.key();
-        let seeds = &[&b"vault"[..], table_key.as_ref(), &[ctx.bumps.table_vault]];
+        let seeds = &[&b"vault"[..], table_key.as_ref()];
         let signer_seeds = &[&seeds[..]];
 
         let cpi_accounts = Transfer {
@@ -173,25 +174,13 @@ pub fn resolve_showdown_callback(
     }
     
     // --- Distribute Winnings ---
-    for winner_info in winner_infos.iter() {
-        if winner_info.amount_won > 0 {
-             for seat in table.seats.iter_mut() {
-                if let Some(player) = seat {
-                    // NOTE: This comparison is inefficient. A mapping from ArcisPublicKey back to Solana Pubkey
-                    // would be better, but requires passing more data into the circuit.
-                    // For now, we find the player by their original Solana pubkey which we assume the client passed in order.
-                    // This part of logic is simplified for now.
-                    // A better implementation would pass player indices into Arcis and get indices back.
-                    // Let's assume winner_info.player_pubkey is just an index for now.
-                }
-            }
-        }
-    }
-    // Simplified payout: Give all pot to the first winner for now.
-    // The complex logic resides in Arcis; this on-chain part is just execution.
-    // We assume the Arcis circuit provides correct amounts. We just need to find the pubkey.
+    // Process winnings more efficiently to reduce stack usage
     for i in 0..MAX_PLAYERS {
-        let winner_payout = winner_infos[i].amount_won;
+        // Extract amount_won from the first 8 bytes (u64)
+        let winner_payout = u64::from_le_bytes([
+            winner_infos.ciphertexts[i][0], winner_infos.ciphertexts[i][1], winner_infos.ciphertexts[i][2], winner_infos.ciphertexts[i][3],
+            winner_infos.ciphertexts[i][4], winner_infos.ciphertexts[i][5], winner_infos.ciphertexts[i][6], winner_infos.ciphertexts[i][7]
+        ]);
         if winner_payout > 0 {
             if let Some(player) = table.seats[i].as_mut() {
                 player.stack = player.stack.saturating_add(winner_payout);
@@ -215,6 +204,7 @@ pub fn resolve_showdown_callback(
     Ok(())
 }
 
+#[queue_computation_accounts("evaluate_hands_and_payout", payer)]
 #[derive(Accounts)]
 #[instruction(table_id: u64, computation_offset: u64)]
 pub struct ResolveShowdown<'info> {
@@ -233,6 +223,14 @@ pub struct ResolveShowdown<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     
+    // Token accounts
+    #[account(mut)]
+    pub table_vault: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub treasury_vault: Account<'info, TokenAccount>,
+    pub platform_config: Account<'info, PlatformConfig>,
+    pub token_program: Program<'info, Token>,
+    
     // Arcium accounts
     #[account(address = derive_mxe_pda!())]
     pub mxe_account: Account<'info, MXEAccount>,
@@ -247,13 +245,14 @@ pub struct ResolveShowdown<'info> {
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_comp_def_pda!(crate::COMP_DEF_OFFSET_EVALUATE_HANDS_AND_PAYOUT))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
-    #[account(mut, address = derive_cluster_pda!(mxe_account))]
+    #[account(mut)]
     pub cluster_account: Account<'info, Cluster>,
     #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
     pub pool_account: Account<'info, FeePool>,
     #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
     pub clock_account: Account<'info, ClockAccount>,
     pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
 }
 
 #[callback_accounts("evaluate_hands_and_payout", payer)]
