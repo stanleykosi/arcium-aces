@@ -12,9 +12,15 @@
 
 use anchor_lang::prelude::*;
 
-// Import the state module, which contains all account struct definitions.
+// Import local modules.
 pub mod state;
+pub mod error;
+pub mod instructions;
+
+// Make their contents available for the program.
 use state::*;
+use error::*;
+use instructions::*;
 
 declare_id!("ACESUnKnOwn111111111111111111111111111111111");
 
@@ -22,14 +28,60 @@ declare_id!("ACESUnKnOwn111111111111111111111111111111111");
 pub mod aces_unknown {
     use super::*;
 
-    /// Placeholder instruction to initialize the program.
-    /// This will be replaced with specific instructions for platform setup,
-    /// table creation, and game actions in subsequent implementation steps.
-    pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
+    /// Initializes a `PlatformConfig` singleton account with the deployer as the admin.
+    /// This should be called once after the program is deployed.
+    pub fn initialize_platform_config(ctx: Context<InitializePlatformConfig>) -> Result<()> {
+        ctx.accounts.platform_config.admin = ctx.accounts.admin.key();
+        // Set default rake: 5% with a cap of 3 Big Blinds (example, can be updated)
+        ctx.accounts.platform_config.rake_bps = 500; // 5.00%
+        // Cap is set later based on table currency, this is a placeholder
+        ctx.accounts.platform_config.rake_max_cap = 0;
         Ok(())
+    }
+
+    /// Instruction for the platform admin to update rake parameters.
+    pub fn update_rake_params(
+        ctx: Context<UpdateRakeParams>,
+        new_rake_bps: u16,
+        new_rake_max_cap: u64,
+    ) -> Result<()> {
+        instructions::update_rake_params(ctx, new_rake_bps, new_rake_max_cap)
+    }
+
+    /// Instruction for a player to create a new poker table.
+    pub fn create_table(
+        ctx: Context<CreateTable>,
+        table_id: u64,
+        small_blind: u64,
+        big_blind: u64,
+        buy_in: u64,
+    ) -> Result<()> {
+        instructions::create_table(ctx, table_id, small_blind, big_blind, buy_in)
+    }
+
+    /// Instruction for a player to join an existing table.
+    pub fn join_table(ctx: Context<JoinTable>, table_id: u64, buy_in: u64) -> Result<()> {
+        instructions::join_table(ctx, table_id, buy_in)
+    }
+
+    /// Instruction for a player to leave a table and cash out their chips.
+    pub fn leave_table(ctx: Context<LeaveTable>, table_id: u64) -> Result<()> {
+        instructions::leave_table(ctx, table_id)
     }
 }
 
-/// Context for the placeholder `initialize` instruction.
+/// Context for initializing the `PlatformConfig` account.
 #[derive(Accounts)]
-pub struct Initialize {}
+pub struct InitializePlatformConfig<'info> {
+    #[account(
+        init,
+        payer = admin,
+        space = 8 + PlatformConfig::INIT_SPACE,
+        seeds = [b"platform_config"],
+        bump
+    )]
+    pub platform_config: Account<'info, PlatformConfig>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
