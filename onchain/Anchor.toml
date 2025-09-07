@@ -8,11 +8,19 @@ skip-lint = false
 [programs.localnet]
 aces_unknown = "8aftkGgLGF2LWDPbvzdJSYwFPoYCxdhk25HAwMAopygZ"
 
+[programs.devnet]
+aces_unknown = "8U3ombZzPCggjjz26FRZ2kjhvtFWWRXv9Zrn6vuNvJj2"
+
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
 cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[provider.devnet]
+cluster = "devnet"
+url = "https://devnet.helius-rpc.com/?api-key=1b6e76c5-88fd-4041-bd28-ac7ab065dc4b"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

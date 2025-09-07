@@ -25,3 +25,20 @@ anchor-spl = "0.31.1"
 arcium-client = { version = "0.2.0", default-features = false }
 arcium-macros = { version = "0.2.0" }
 arcium-anchor = { version = "0.2.0" }
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
+strip = "debuginfo"
+panic = "abort"
+stack-protector = false
+
+[profile.dev]
+overflow-checks = true
+opt-level = 3
+codegen-units = 1
+panic = "abort"
+debug = false
+strip = "debuginfo"

@@ -30,7 +30,7 @@ const COMP_DEF_OFFSET_REVEAL_COMMUNITY_CARDS: u32 = comp_def_offset("reveal_comm
 const COMP_DEF_OFFSET_EVALUATE_HANDS_AND_PAYOUT: u32 = comp_def_offset("evaluate_hands_and_payout");
 
 // Program ID
-declare_id!("8aftkGgLGF2LWDPbvzdJSYwFPoYCxdhk25HAwMAopygZ");
+declare_id!("8U3ombZzPCggjjz26FRZ2kjhvtFWWRXv9Zrn6vuNvJj2");
 
 #[arcium_program]
 pub mod aces_unknown {
@@ -118,6 +118,33 @@ pub mod aces_unknown {
         instructions::force_hand_refund::force_hand_refund(ctx, table_id)
     }
 
+    // ========================================
+    // Computation Definition Initialization
+    // ========================================
+
+    /// Initializes the computation definition for shuffle_and_deal.
+    pub fn init_shuffle_and_deal_comp_def(
+        ctx: Context<InitShuffleAndDealCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
+
+    /// Initializes the computation definition for reveal_community_cards.
+    pub fn init_reveal_community_cards_comp_def(
+        ctx: Context<InitRevealCommunityCardsCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
+
+    /// Initializes the computation definition for evaluate_hands_and_payout.
+    pub fn init_evaluate_hands_and_payout_comp_def(
+        ctx: Context<InitEvaluateHandsAndPayoutCompDef>,
+    ) -> Result<()> {
+        init_comp_def(ctx.accounts, true, 0, None, None)?;
+        Ok(())
+    }
 
     // ========================================
     // Arcium Callbacks
@@ -149,6 +176,60 @@ pub mod aces_unknown {
     ) -> Result<()> {
         instructions::evaluate_hands_and_payout_callback(ctx, output)
     }
+}
+
+#[init_computation_definition_accounts("shuffle_and_deal", payer)]
+#[derive(Accounts)]
+pub struct InitShuffleAndDealCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        address = derive_mxe_pda!()
+    )]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: comp_def_account, checked by arcium program.
+    /// Can't check it here as it's not initialized yet.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+#[init_computation_definition_accounts("reveal_community_cards", payer)]
+#[derive(Accounts)]
+pub struct InitRevealCommunityCardsCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        address = derive_mxe_pda!()
+    )]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: comp_def_account, checked by arcium program.
+    /// Can't check it here as it's not initialized yet.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
+}
+
+#[init_computation_definition_accounts("evaluate_hands_and_payout", payer)]
+#[derive(Accounts)]
+pub struct InitEvaluateHandsAndPayoutCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(
+        mut,
+        address = derive_mxe_pda!()
+    )]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut)]
+    /// CHECK: comp_def_account, checked by arcium program.
+    /// Can't check it here as it's not initialized yet.
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    pub system_program: Program<'info, System>,
 }
 
 /// Context for initializing the `PlatformConfig` account.
