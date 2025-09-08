@@ -1,0 +1,108 @@
+// Filepath: onchain/scripts/init-single-comp-def.js
+const anchor = require("@coral-xyz/anchor");
+const { PublicKey, Keypair } = require("@solana/web3.js");
+const fs = require("fs");
+const os = require("os");
+const { 
+  getArciumProgAddress, 
+  getArciumAccountBaseSeed, 
+  getCompDefAccOffset,
+  getMXEAccAddress
+} = require("@arcium-hq/client");
+
+async function main() {
+    // Set up provider
+    const provider = anchor.AnchorProvider.env();
+    anchor.setProvider(provider);
+    
+    // Load the program with explicit devnet program ID
+    const programId = new PublicKey("8U3ombZzPCggjjz26FRZ2kjhvtFWWRXv9Zrn6vuNvJj2");
+    const idl = require("../target/idl/aces_unknown.json");
+    
+    // Create a minimal program client with just the init method we need
+    const program = new anchor.Program({
+        ...idl,
+        instructions: idl.instructions.filter(ix => 
+            ix.name === "initShuffleAndDealCompDef"
+        ),
+        accounts: idl.accounts ? idl.accounts.filter(acc => 
+            acc.name === "MXEAccount"
+        ) : []
+    }, programId, provider);
+    
+    // Load owner keypair
+    const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
+
+    console.log(`Using program ${program.programId.toBase58()}`);
+    console.log(`Using wallet ${owner.publicKey.toBase58()}`);
+
+    // Initialize just one computation definition
+    const circuit = { name: "shuffle_and_deal", initMethod: "initShuffleAndDealCompDef" };
+    
+    try {
+        await initCompDef(circuit, program, provider, owner);
+        console.log("✅ Computation definition initialization complete.");
+    } catch (error) {
+        console.error("Failed to initialize computation definition:", error);
+    }
+}
+
+// Helper function to initialize computation definitions
+async function initCompDef(circuit, program, provider, owner) {
+    console.log(`Initializing CompDef for '${circuit.name}'...`);
+    
+    // Get the computation definition account PDA
+    const baseSeedCompDefAcc = getArciumAccountBaseSeed("ComputationDefinitionAccount");
+    const offsetBuffer = getCompDefAccOffset(circuit.name);
+    
+    const compDefPDA = PublicKey.findProgramAddressSync(
+        [baseSeedCompDefAcc, program.programId.toBuffer(), offsetBuffer],
+        getArciumProgAddress()
+    )[0];
+
+    try {
+        // Try to fetch the account to see if it exists
+        const accountInfo = await provider.connection.getAccountInfo(compDefPDA);
+        if (accountInfo) {
+            console.log(`CompDef for '${circuit.name}' already initialized.`);
+            return;
+        }
+    } catch (e) {
+        // Account doesn't exist, proceed
+    }
+
+    // Get the MXE account
+    const mxeAccountPda = getMXEAccAddress(program.programId);
+    
+    try {
+        // Initialize the computation definition
+        console.log(`Calling initialization method '${circuit.initMethod}' for '${circuit.name}'...`);
+        
+        const tx = await program.methods[circuit.initMethod]()
+            .accounts({
+                payer: owner.publicKey,
+                mxeAccount: mxeAccountPda,
+                compDefAccount: compDefPDA,
+                arciumProgram: getArciumProgAddress(),
+                systemProgram: anchor.web3.SystemProgram.programId,
+            })
+            .signers([owner])
+            .rpc();
+            
+        console.log(`Successfully initialized '${circuit.name}' computation definition.`);
+        console.log(`Transaction signature: ${tx}`);
+    } catch (error) {
+        console.error(`Failed to initialize '${circuit.name}' computation definition:`, error);
+        throw error;
+    }
+}
+
+function readKpJson(path) {
+    const file = fs.readFileSync(path);
+    return Keypair.fromSecretKey(new Uint8Array(JSON.parse(file.toString())));
+}
+
+main().catch(err => {
+    console.error(err);
+    process.exit(1);
+});

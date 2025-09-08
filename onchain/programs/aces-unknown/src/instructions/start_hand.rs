@@ -43,6 +43,7 @@ pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u
     let table = &mut ctx.accounts.table;
 
     // --- Validation ---
+    msg!("start_hand: entering, table_id=%{}", _table_id);
     require!(
         table.game_state == GameState::WaitingForPlayers || table.game_state == GameState::HandComplete,
         AcesUnknownErrorCode::InvalidGameState
@@ -74,6 +75,7 @@ pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u
         next_dealer_pos = (next_dealer_pos + 1) % MAX_PLAYERS as u8;
     }
     table.dealer_position = next_dealer_pos;
+    msg!("start_hand: dealer rotated to {}", table.dealer_position);
 
     // --- Identify Blinds ---
     let (sb_pos, bb_pos, first_to_act_pos) = find_blinds_and_first_actor(table)?;
@@ -82,6 +84,7 @@ pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u
     // Extract table values first to avoid borrow conflicts
     let small_blind = table.small_blind;
     let big_blind = table.big_blind;
+    msg!("start_hand: blinds sb={}, bb={}", small_blind, big_blind);
     
     // Small Blind
     let sb_player = table.seats[sb_pos as usize].as_mut().unwrap();
@@ -100,8 +103,10 @@ pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u
     table.pot += bb_amount;
 
     table.current_bet = big_blind;
+    msg!("start_hand: blinds collected, pot={}", table.pot);
     
     // --- Queue Arcium Computation ---
+    msg!("start_hand: preparing args for queue_computation, players={}", table.player_count);
     // Use a more memory-efficient approach to avoid stack overflow
     let mut args = Vec::with_capacity(32 + MAX_PLAYERS); // Pre-allocate with reasonable capacity
     
@@ -119,6 +124,7 @@ pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u
     // Drop the mutable borrow before calling queue_computation
     let _ = table;
     
+    msg!("start_hand: calling queue_computation with computation_offset={} ", computation_offset);
     queue_computation(
         ctx.accounts,
         computation_offset,
@@ -129,6 +135,7 @@ pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u
         ],
         None,
     )?;
+    msg!("start_hand: queue_computation dispatched");
 
     // Re-borrow table after queue_computation
     let table = &mut ctx.accounts.table;

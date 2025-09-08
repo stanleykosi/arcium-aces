@@ -8,7 +8,7 @@
     "deploy": "anchor deploy"
   },
   "dependencies": {
-    "@arcium-hq/client": "0.2.0",
+    "@arcium-hq/client": "0.3.0",
     "@coral-xyz/anchor": "^0.31.1",
     "ts-node": "^10.9.2"
   },
