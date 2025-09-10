@@ -71,8 +71,8 @@ pub mod aces_unknown {
     }
 
     /// Instruction for a player to join an existing table.
-    pub fn join_table(ctx: Context<JoinTable>, table_id: u64, buy_in: u64) -> Result<()> {
-        instructions::join_table::join_table(ctx, table_id, buy_in)
+    pub fn join_table(ctx: Context<JoinTable>, table_id: u64, seat_index: u8, buy_in: u64) -> Result<()> {
+        instructions::join_table::join_table(ctx, table_id, seat_index, buy_in)
     }
 
     /// Instruction for a player to leave a table and cash out their chips.

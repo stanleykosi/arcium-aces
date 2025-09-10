@@ -13,6 +13,8 @@ pub mod table;
 pub mod hand_data;
 pub mod card;
 pub mod constants;
+pub mod player_seat;
+pub mod encrypted_hand;
 
 // Re-export the contents of each submodule for easy access from other parts of the program.
 pub use platform_config::*;
@@ -20,3 +22,5 @@ pub use table::*;
 pub use hand_data::*;
 pub use card::*;
 pub use constants::*;
+pub use player_seat::*;
+pub use encrypted_hand::*;

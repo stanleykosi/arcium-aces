@@ -10,23 +10,23 @@
 //! - `player`: The signer leaving the table.
 //! - `player_token_account`: The player's token account to receive the cashed-out chips.
 //! - `table_vault`: The table's token vault from which the chips are transferred.
+//! - `player_seat`: The player's seat account to be closed.
 //!
 //! @logic
 //! 1. Verifies that the game is not currently in progress (`GameState::HandInProgress`).
-//! 2. Finds the player in the `seats` array.
-//! 3. Retrieves the player's current chip stack.
-//! 4. Signs with the table's PDA seeds to authorize a transfer from the `table_vault`.
-//! 5. Transfers the player's stack from the `table_vault` back to their `player_token_account`.
-//! 6. Removes the player from the `seats` array by setting their seat to `None`.
-//! 7. Decrements the `player_count` on the `Table` account.
+//! 2. Retrieves the player's current chip stack from their PlayerSeat account.
+//! 3. Signs with the table's PDA seeds to authorize a transfer from the `table_vault`.
+//! 4. Transfers the player's stack from the `table_vault` back to their `player_token_account`.
+//! 5. Closes the player's PlayerSeat account and refunds rent to the player.
+//! 6. Decrements the `player_count` on the `Table` account.
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use crate::state::{GameState, Table};
+use crate::state::{GameState, Table, PlayerSeat};
 use crate::error::AcesUnknownErrorCode;
 
 /// The instruction logic for a player to leave a table.
-pub fn leave_table(ctx: Context<LeaveTable>, _table_id: u64) -> Result<()> {
+pub fn leave_table(ctx: Context<LeaveTable>, table_id: u64) -> Result<()> {
     let table = &mut ctx.accounts.table;
 
     // --- Validation ---
@@ -36,20 +36,19 @@ pub fn leave_table(ctx: Context<LeaveTable>, _table_id: u64) -> Result<()> {
     );
 
     let player_key = ctx.accounts.player.key();
-    let mut player_seat_index: Option<usize> = None;
-
-    for (i, seat) in table.seats.iter().enumerate() {
-        if let Some(player_info) = seat {
-            if player_info.pubkey == player_key {
-                player_seat_index = Some(i);
-                // Cannot break in Arcis, so we do the same here for consistency
-            }
-        }
-    }
-
-    let seat_idx = player_seat_index.ok_or(AcesUnknownErrorCode::PlayerNotFound)?;
-    let player_info = table.seats[seat_idx].unwrap(); // Safe to unwrap due to check above
-    let cash_out_amount = player_info.stack;
+    let player_seat = &ctx.accounts.player_seat;
+    
+    // Verify the player seat belongs to the correct player and table
+    require!(
+        player_seat.player_pubkey == player_key,
+        AcesUnknownErrorCode::PlayerNotFound
+    );
+    require!(
+        player_seat.table_pubkey == table.key(),
+        AcesUnknownErrorCode::PlayerNotFound
+    );
+    
+    let cash_out_amount = player_seat.stack;
 
     if cash_out_amount > 0 {
         // --- Token Transfer ---
@@ -68,7 +67,7 @@ pub fn leave_table(ctx: Context<LeaveTable>, _table_id: u64) -> Result<()> {
     }
 
     // --- State Update ---
-    table.seats[seat_idx] = None;
+    table.occupied_seats &= !(1 << player_seat.seat_index);
     table.player_count -= 1;
 
     // TODO: Handle dealer button and turn adjustments if the leaving player affects them.
@@ -78,7 +77,7 @@ pub fn leave_table(ctx: Context<LeaveTable>, _table_id: u64) -> Result<()> {
     msg!(
         "Player {} left Table #{} with {} chips.",
         player_key,
-        _table_id,
+        table_id,
         cash_out_amount
     );
     Ok(())
@@ -115,6 +114,15 @@ pub struct LeaveTable<'info> {
         bump,
     )]
     pub table_vault: Account<'info, TokenAccount>,
+
+    /// The player's seat account to be closed.
+    #[account(
+        mut,
+        close = player,
+        seeds = [b"player_seat", table.key().as_ref(), player_seat.seat_index.to_le_bytes().as_ref()],
+        bump = player_seat.bump,
+    )]
+    pub player_seat: Account<'info, PlayerSeat>,
 
     // System programs
     pub token_program: Program<'info, Token>,

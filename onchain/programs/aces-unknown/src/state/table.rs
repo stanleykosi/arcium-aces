@@ -13,7 +13,23 @@
 
 use anchor_lang::prelude::*;
 use crate::state::card::Card;
-use crate::state::constants::MAX_PLAYERS;
+
+/// A compact representation of a player seat for quick lookup
+#[derive(InitSpace, AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PlayerSeatInfo {
+    /// The player's wallet public key.
+    pub pubkey: Pubkey,
+    /// The player's current chip stack at the table.
+    pub stack: u64,
+    /// Flag indicating if the player is currently participating in the hand.
+    pub is_active_in_hand: bool,
+    /// Flag indicating if the player is all-in.
+    pub is_all_in: bool,
+    /// The amount the player has bet in the current betting round.
+    pub bet_this_round: u64,
+    /// The total amount the player has committed to the pot in the entire hand.
+    pub total_bet_this_hand: u64,
+}
 
 /// Represents a single poker table.
 #[account]
@@ -25,13 +41,11 @@ pub struct Table {
     pub creator: Pubkey,
     /// The public key of the platform admin, copied from `PlatformConfig` on creation.
     pub admin: Pubkey,
-    /// An array representing the seats at the table. `None` signifies an empty seat.
-    pub seats: [Option<PlayerInfo>; MAX_PLAYERS],
     /// The number of players currently seated at the table.
     pub player_count: u8,
-    /// The index in the `seats` array corresponding to the player with the dealer button.
+    /// The index in the seats corresponding to the player with the dealer button.
     pub dealer_position: u8,
-    /// The index in the `seats` array corresponding to the player whose turn it is to act.
+    /// The index in the seats corresponding to the player whose turn it is to act.
     pub turn_position: u8,
     /// The current state of the game (e.g., waiting for players, hand in progress).
     pub game_state: GameState,
@@ -58,23 +72,9 @@ pub struct Table {
     /// The index of the player who made the last aggressive action (bet or raise) in the current round.
     /// This is used to determine when a betting round is complete.
     pub last_aggressor_position: u8,
-}
-
-/// Contains the state for a single player seated at a table.
-#[derive(InitSpace, AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PlayerInfo {
-    /// The player's wallet public key.
-    pub pubkey: Pubkey,
-    /// The player's current chip stack at the table.
-    pub stack: u64,
-    /// Flag indicating if the player is currently participating in the hand.
-    pub is_active_in_hand: bool,
-    /// Flag indicating if the player is all-in.
-    pub is_all_in: bool,
-    /// The amount the player has bet in the current betting round.
-    pub bet_this_round: u64,
-    /// The total amount the player has committed to the pot in the entire hand.
-    pub total_bet_this_hand: u64,
+    /// A bitmask representing which seats are occupied (1 = occupied, 0 = empty).
+    /// This allows us to track seat occupancy without storing large arrays.
+    pub occupied_seats: u8,
 }
 
 /// Enum representing the possible states of a poker game.

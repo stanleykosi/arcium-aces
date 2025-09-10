@@ -37,6 +37,12 @@ pub enum AcesUnknownErrorCode {
     #[msg("Player not found at this table.")]
     PlayerNotFound,
 
+    #[msg("Invalid seat index. Must be between 0 and 5.")]
+    InvalidSeatIndex,
+
+    #[msg("Seat is already occupied.")]
+    SeatOccupied,
+
     #[msg("Cannot leave the table while a hand is in progress.")]
     CannotLeaveMidHand,
 

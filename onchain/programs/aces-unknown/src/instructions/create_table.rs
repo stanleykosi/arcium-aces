@@ -26,9 +26,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::{
     token::{self, Mint, Token, TokenAccount, Transfer},
 };
-use crate::state::{BettingRound, GameState, PlayerInfo, Table, PlatformConfig};
+use crate::state::{BettingRound, GameState, Table, PlatformConfig};
 use crate::error::AcesUnknownErrorCode;
-use crate::state::constants::MAX_PLAYERS;
 
 /// The instruction logic for creating a new poker table.
 pub fn create_table(
@@ -65,19 +64,9 @@ pub fn create_table(
     table.token_mint = ctx.accounts.token_mint.key();
     table.turn_duration_seconds = 30; // Default turn duration
 
-    // Seat the creator at the first position
-    let mut seats = [None; MAX_PLAYERS];
-    let creator_info = PlayerInfo {
-        pubkey: ctx.accounts.creator.key(),
-        stack: buy_in,
-        is_active_in_hand: false,
-        is_all_in: false,
-        bet_this_round: 0,
-        total_bet_this_hand: 0,
-    };
-    seats[0] = Some(creator_info);
-    table.seats = seats;
-
+    // Initialize empty seats
+    table.occupied_seats = 0; // No seats occupied initially
+    
     table.player_count = 1;
     table.dealer_position = 0; // Creator starts as the dealer
     table.turn_position = 0;
