@@ -57,8 +57,8 @@ const MAX_PLAYERS: usize = 6;
 /// A tuple containing:
 /// - `Enc<Mxe, Deck>`: The entire 52-card deck, shuffled and encrypted so only the MPC can read it.
 /// - `[u8; 32]`: A cryptographic commitment to the shuffle for later verification.
-/// - `[Enc<Shared, Hand>; 6]`: An array of encrypted 2-card hands for each seat. Only the
-///   corresponding player can decrypt their own hand. Inactive seats contain encrypted dummy data.
+/// - `Enc<Mxe, [Hand; 6]>`: An array of 2-card hands for each seat encrypted for the MXE.
+///   Only the MPC can read these hands. Inactive seats contain dummy data.
 #[instruction]
 pub fn shuffle_and_deal(
     mxe: Mxe,
@@ -67,7 +67,7 @@ pub fn shuffle_and_deal(
 ) -> (
     Enc<Mxe, Deck>,
     [u8; 32],
-    [Enc<Shared, Hand>; MAX_PLAYERS],
+    Enc<Mxe, [Hand; MAX_PLAYERS]>,
 ) {
     // 1. Shuffle the Deck
     let mut shuffled_deck = INITIAL_DECK;
@@ -101,38 +101,29 @@ pub fn shuffle_and_deal(
         }
     }
 
-    // 4. Encrypt Hands for Each Player
-    // We must create an array of Enc<Shared, Hand> to return.
-    // Arcis requires a fixed-size array, so we must initialize it fully.
-    // The `from_fn` approach is not supported, so we build it manually.
-    
-    // Create a dummy hand for inactive players. We must encrypt something.
-    let dummy_hand = Hand::from_array([52, 52]);
-    // Create a dummy shared context using the first pubkey. The data is irrelevant for inactive players.
-    let dummy_shared_context = Shared::new(player_pubkeys[0]);
-    let dummy_encrypted_hand = dummy_shared_context.from_arcis(dummy_hand);
-
-    let mut encrypted_hands: [Enc<Shared, Hand>; MAX_PLAYERS] = [
-        dummy_encrypted_hand,
-        dummy_encrypted_hand,
-        dummy_encrypted_hand,
-        dummy_encrypted_hand,
-        dummy_encrypted_hand,
-        dummy_encrypted_hand,
+    // 4. Create Hands Array
+    // Create an array of hands for all players (active and inactive)
+    let mut hands_array: [Hand; MAX_PLAYERS] = [
+        Hand::from_array([52, 52]), // dummy hand
+        Hand::from_array([52, 52]), // dummy hand
+        Hand::from_array([52, 52]), // dummy hand
+        Hand::from_array([52, 52]), // dummy hand
+        Hand::from_array([52, 52]), // dummy hand
+        Hand::from_array([52, 52]), // dummy hand
     ];
 
     for i in 0..MAX_PLAYERS {
-        // We encrypt hands for both active and inactive players.
+        // Set hands for both active and inactive players.
         // The on-chain program and clients will know to ignore hands for inactive players.
-        // This is necessary to satisfy Arcis's fixed-size array requirements.
-        let player_shared_context = Shared::new(player_pubkeys[i]);
-        let hand_struct = Hand::from_array(dealt_cards[i]);
-        encrypted_hands[i] = player_shared_context.from_arcis(hand_struct);
+        hands_array[i] = Hand::from_array(dealt_cards[i]);
     }
-    
+
     // 5. Encrypt the Full Shuffled Deck for the MXE
     let encrypted_deck = mxe.from_arcis(Deck::from_array(shuffled_deck));
 
-    // 6. Return all data
+    // 6. Encrypt the Hands Array for the MXE
+    let encrypted_hands = mxe.from_arcis(hands_array);
+
+    // 7. Return all data
     (encrypted_deck, shuffle_commitment, encrypted_hands)
 }

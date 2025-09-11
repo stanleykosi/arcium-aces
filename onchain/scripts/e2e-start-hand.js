@@ -1,7 +1,8 @@
 // Filepath: onchain/scripts/e2e-start-hand.js
 const anchor = require("@coral-xyz/anchor");
 const { PublicKey, Keypair, SystemProgram } = require("@solana/web3.js");
-const { getMXEPublicKey, awaitComputationFinalization, getComputationAccAddress, getCompDefAccOffset, getMXEAccAddress, getMempoolAccAddress, getExecutingPoolAccAddress, getCompDefAccAddress, getClusterAccAddress, getClockAccAddress, getStakingPoolAccAddress, getArciumProgAddress } = require("@arcium-hq/client");
+const { getMXEPublicKey, awaitComputationFinalization, getComputationAccAddress, getCompDefAccOffset, getMXEAccAddress, getMempoolAccAddress, getExecutingPoolAccAddress, getCompDefAccAddress, getClusterAccAddress, getClockAccAddress, getStakingPoolAccAddress, getArciumProgAddress, getArciumAccountBaseSeed } = require("@arcium-hq/client");
+const crypto = require("crypto");
 const { getOrCreateAssociatedTokenAccount, createMint, mintTo } = require("@solana/spl-token");
 const os = require("os");
 const fs = require("fs");
@@ -77,14 +78,23 @@ async function main() {
 
   // 3) Join table with player2
   console.log("Player2 joining table...");
+  const seatIndex = 1; // Player2 joins at seat 1 (seat 0 is occupied by creator)
+  const playerSeatPda = PublicKey.findProgramAddressSync([
+    Buffer.from("player_seat"),
+    tablePda.toBuffer(),
+    Buffer.from([seatIndex])
+  ], program.programId)[0];
+
   await program.methods
-    .joinTable(new anchor.BN(tableId.toString()), buyIn)
+    .joinTable(new anchor.BN(tableId.toString()), seatIndex, buyIn)
     .accounts({
       table: tablePda,
       player: player2.publicKey,
       playerTokenAccount: player2Ata.address,
       tableVault: tableVaultPda,
+      playerSeat: playerSeatPda,
       tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+      systemProgram: SystemProgram.programId,
     })
     .signers([player2])
     .rpc({ commitment: "confirmed" });
@@ -94,14 +104,49 @@ async function main() {
   const clusterOffset = 1116522165;
   const arciumProgramId = getArciumProgAddress();
   const clusterAccount = getClusterAccAddress(clusterOffset);
-  const poolAccount = getStakingPoolAccAddress();
+  const poolAccount = await resolveFeePoolPda(provider, arciumProgramId);
   const clockAccount = getClockAccAddress();
+
+  console.log("Arcium accounts:");
+  console.log("  Arcium Program:", arciumProgramId.toBase58());
+  console.log("  Cluster Account:", clusterAccount.toBase58());
+  console.log("  Pool Account:", poolAccount.toBase58());
+  console.log("  Clock Account:", clockAccount.toBase58());
+
+  // Check if Arcium accounts exist
+  const clusterInfo = await getAccountInfoWithRetry(provider.connection, clusterAccount, 3, 1000);
+  const poolInfo = await getAccountInfoWithRetry(provider.connection, poolAccount, 3, 1000);
+  if (poolInfo) {
+    console.log("Pool owner:", poolInfo.owner.toBase58());
+  }
+
+  console.log("Cluster account exists:", !!clusterInfo);
+  console.log("Pool account exists:", !!poolInfo);
+
+  if (!clusterInfo || !poolInfo) {
+    console.log("Arcium accounts not initialized. You may need to run arcium init first.");
+    console.log("Try running: arcium init --cluster-offset 1116522165");
+    return;
+  }
+
   const computationOffset = new anchor.BN(Buffer.from(cryptoRandomBytes(8)));
   const mxePub = await getMXEPublicKey(provider, program.programId);
   const arciumPubkey32 = Uint8Array.from(mxePub); // 32 bytes
   const handDataSeedCounter = (await program.account.table.fetch(tablePda)).handIdCounter; // u64
 
   console.log("Starting hand...");
+  const compDefOffsetBytes = Buffer.from(getCompDefAccOffset("shuffle_and_deal"));
+  // Try BE first (in case macro uses BE interpretation), fall back to LE
+  const compDefOffsetU32BE = compDefOffsetBytes.readUInt32BE(0);
+  const compDefOffsetU32LE = compDefOffsetBytes.readUInt32LE(0);
+  let expectedCompDefPda = getCompDefAccAddress(program.programId, compDefOffsetU32BE);
+  let existing = null;
+  try { existing = await program.provider.connection.getAccountInfo(expectedCompDefPda); } catch { }
+  if (!existing) {
+    expectedCompDefPda = getCompDefAccAddress(program.programId, compDefOffsetU32LE);
+  }
+  console.log("Derived CompDef PDA (SDK):", expectedCompDefPda.toBase58());
+
   await program.methods
     .startHand(new anchor.BN(tableId.toString()), computationOffset, Array.from(arciumPubkey32))
     .accounts({
@@ -112,7 +157,7 @@ async function main() {
       mempoolAccount: getMempoolAccAddress(program.programId),
       executingPool: getExecutingPoolAccAddress(program.programId),
       computationAccount: getComputationAccAddress(program.programId, computationOffset),
-      compDefAccount: getCompDefAccAddress(program.programId, Buffer.from(getCompDefAccOffset("shuffle_and_deal")).readUInt32LE()),
+      compDefAccount: expectedCompDefPda,
       clusterAccount,
       poolAccount,
       clockAccount,
@@ -130,6 +175,35 @@ async function main() {
   const table = await program.account.table.fetch(tablePda);
   console.log("Game state:", table.gameState);
   console.log("Hand started. Dealer position:", table.dealerPosition);
+}
+
+async function resolveFeePoolPda(provider, arciumProgramId) {
+  const seedsToTry = [
+    "FeePool",
+    "FeePoolAccount",
+    "fee_pool",
+  ];
+  const expectedDisc = anchorDiscriminator("FeePool");
+  for (const seed of seedsToTry) {
+    const candidate = PublicKey.findProgramAddressSync([Buffer.from(seed)], arciumProgramId)[0];
+    const info = await provider.connection.getAccountInfo(candidate);
+    if (info && info.data && info.data.length >= 8 && equalBytes(info.data.slice(0, 8), expectedDisc)) {
+      return candidate;
+    }
+  }
+  // Fallback to staking pool PDA if FeePool cannot be located (will likely fail discriminator later)
+  return getStakingPoolAccAddress();
+}
+
+function anchorDiscriminator(name) {
+  const preimage = `account:${name}`;
+  return crypto.createHash("sha256").update(preimage).digest().slice(0, 8);
+}
+
+function equalBytes(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) return false; }
+  return true;
 }
 
 function readKpJson(path) { const file = fs.readFileSync(path); return Keypair.fromSecretKey(new Uint8Array(JSON.parse(file.toString()))); }

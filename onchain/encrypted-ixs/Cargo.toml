@@ -5,7 +5,7 @@ description = "Encrypted instructions for Aces Unknown"
 edition = "2021"
 
 [dependencies]
-arcis-imports = { version = "0.2.0" }
+arcis-imports = { version = "0.3.0" }
 
 [profile.release]
 overflow-checks = true

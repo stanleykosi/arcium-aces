@@ -2532,3 +2532,295 @@ async function getMXEPublicKeyWithRetry(
 ```
 
 And voila, you should have a working program that is compatible with Arcium tooling v0.2.0!
+
+# v0.2.x to v0.3.0
+
+## 1. Update Rust toolchain
+
+Arcium v0.3.0 requires Rust 1.88.0. Create or update your `rust-toolchain` file:
+
+```bash
+# Create or overwrite the rust-toolchain file
+echo "1.88.0" | tee rust-toolchain > /dev/null
+```
+
+## 2. Add required Cargo patch
+
+Add the following patch to your workspace `Cargo.toml`:
+
+```toml
+[patch.crates-io]
+proc-macro2 = { git = 'https://github.com/arcium-hq/proc-macro2.git' }
+```
+
+This patch is required for proper compilation of Arcium v0.3.0 projects. The patched `proc-macro2` crate contains fixes necessary for the Arcium macros to work correctly with Rust 1.88.0 and the new v0.3.0 architecture.
+
+## 3. Update Arcium Rust dependencies
+
+```bash
+# Update program dependencies
+cd programs/your-program-name
+cargo update --package arcium-client --precise 0.3.0
+cargo update --package arcium-macros --precise 0.3.0
+cargo update --package arcium-anchor --precise 0.3.0
+
+# Update encrypted-ixs dependencies
+cd ../../encrypted-ixs
+cargo update --package arcis-imports --precise 0.3.0
+```
+
+## 4. Update Arcium TS dependencies
+
+{% tabs %}
+{% tab title="npm" %}
+```bash
+npm install @arcium-hq/client@0.3.0
+```
+{% endtab %}
+
+{% tab title="yarn" %}
+```bash
+yarn add @arcium-hq/client@0.3.0
+```
+{% endtab %}
+
+{% tab title="pnpm" %}
+```bash
+pnpm add @arcium-hq/client@0.3.0
+```
+{% endtab %}
+{% endtabs %}
+
+## 5. Enable init-if-needed feature in Cargo.toml
+
+Add the `init-if-needed` feature to your `anchor-lang` dependency in your program's `Cargo.toml`:
+
+```toml
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+```
+
+This feature is required for the Sign PDA account management in v0.3.0.
+
+## 6. Add Sign PDA Account to your queue computation accounts
+
+You need to add a new required account (`sign_pda_account`) to all your `queue_computation_accounts` context structs:
+
+```rust
+#[queue_computation_accounts]
+#[derive(Accounts)]
+pub struct YourComputationContext<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    // Add this new required account
+    #[account(
+        init_if_needed,
+        space = 9,
+        payer = payer,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+
+    // ... your other existing accounts
+}
+```
+
+And in your instruction function, add this line to set the bump:
+
+```rust
+pub fn your_computation_function(
+    ctx: Context<YourComputationContext>,
+    computation_offset: u64,
+    // ... other parameters
+) -> Result<()> {
+    // Add this line
+    ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+
+    // ... rest of your function
+}
+```
+
+## 7. Update queue\_computation call signature
+
+The `queue_computation` function now requires explicit callback instruction specification. Update your calls from:
+
+```rust
+// Before v0.3.0
+queue_computation(ctx.accounts, computation_offset, args, None, None)?;
+```
+
+to:
+
+```rust
+// v0.3.0
+queue_computation(
+    ctx.accounts,
+    computation_offset,
+    args,
+    None,
+    vec![YourCallback::callback_ix(&[])],
+)?;
+```
+
+Replace `YourCallback` with the actual name of your callback struct.
+
+For detailed examples and best practices on implementing callback instructions with custom accounts, see [Callback Accounts](../program/callback-accs).
+
+## 8. Remove payer from callback accounts
+
+Callback account structs no longer require a `payer` parameter. Update your callback accounts from:
+
+```rust
+// Before v0.3.0
+#[callback_accounts("your_computation", payer)]
+#[derive(Accounts)]
+pub struct YourCallback<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    pub arcium_program: Program<'info, Arcium>,
+    // ... other accounts
+}
+```
+
+to:
+
+```rust
+// v0.3.0
+#[callback_accounts("your_computation")]
+#[derive(Accounts)]
+pub struct YourCallback<'info> {
+    // No payer required
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(
+        address = derive_comp_def_pda!(COMP_DEF_OFFSET)
+    )]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: instructions_sysvar, checked by the account constraint
+    pub instructions_sysvar: AccountInfo<'info>,
+}
+```
+
+## 9. Update x25519 function calls (TypeScript only)
+
+If you're using x25519 key generation in your TypeScript client code, update the function name:
+
+```typescript
+// Before v0.3.0
+const privateKey = x25519.utils.randomPrivateKey();
+
+// v0.3.0
+const privateKey = x25519.utils.randomSecretKey();
+```
+
+## 10. Verify Migration
+
+After completing all migration steps, verify that everything works correctly:
+
+### Build Test
+
+```bash
+# From your workspace root
+arcium build
+```
+
+### Type Checking
+
+```bash
+# Ensure all new types compile correctly
+cargo check --all
+```
+
+### Test Your Changes
+
+```bash
+# Run your existing tests to ensure functionality is preserved
+arcium test
+```
+
+## Complete Example
+
+Here's a complete before/after example of a typical computation function:
+
+### Before v0.3.0:
+
+```rust
+#[queue_computation_accounts]
+#[derive(Accounts)]
+pub struct Flip<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    // ... other accounts (no sign_pda_account)
+}
+
+pub fn flip(
+    ctx: Context<Flip>,
+    computation_offset: u64,
+    user_choice: [u8; 32],
+    pub_key: [u8; 32],
+    nonce: u128,
+) -> Result<()> {
+    let args = vec![
+        Argument::ArcisPubkey(pub_key),
+        Argument::PlaintextU128(nonce),
+        Argument::EncryptedU8(user_choice),
+    ];
+
+    queue_computation(ctx.accounts, computation_offset, args, None, None)?;
+    Ok(())
+}
+```
+
+### v0.3.0:
+
+```rust
+#[queue_computation_accounts]
+#[derive(Accounts)]
+pub struct Flip<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    #[account(
+        init_if_needed,
+        space = 9,
+        payer = payer,
+        seeds = [&SIGN_PDA_SEED],
+        bump,
+        address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Account<'info, SignerAccount>,
+
+    // ... other existing accounts
+}
+
+pub fn flip(
+    ctx: Context<Flip>,
+    computation_offset: u64,
+    user_choice: [u8; 32],
+    pub_key: [u8; 32],
+    nonce: u128,
+) -> Result<()> {
+    let args = vec![
+        Argument::ArcisPubkey(pub_key),
+        Argument::PlaintextU128(nonce),
+        Argument::EncryptedU8(user_choice),
+    ];
+
+    ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+
+    queue_computation(
+        ctx.accounts,
+        computation_offset,
+        args,
+        None,
+        vec![FlipCallback::callback_ix(&[])],
+    )?;
+
+    Ok(())
+}
+```
+
+That's it! Your program should now be compatible with Arcium tooling v0.3.0.

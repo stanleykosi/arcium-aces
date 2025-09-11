@@ -19,5 +19,8 @@
     "overrides": {
       "esbuild": "^0.25.9"
     }
+  },
+  "dependencies": {
+    "@arcium-hq/client": "^0.3.0"
   }
 }

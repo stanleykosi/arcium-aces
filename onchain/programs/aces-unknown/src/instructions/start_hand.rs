@@ -26,20 +26,16 @@
 
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
-use arcium_client::idl::arcium::types::CallbackAccount;
+use anchor_lang::Discriminator;
 use arcium_client::idl::arcium::accounts::Cluster;
-use arcium_client::idl::arcium::ID_CONST;
+use crate::SignerAccount;
 use crate::state::{Table, HandData, GameState};
 use crate::error::AcesUnknownErrorCode;
 use crate::state::constants::MAX_PLAYERS;
-use crate::ID;
+
 
 /// Instruction logic for starting a new hand.
-pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u64, arcium_pubkeys: [u8; 32]) -> Result<()> {
-    // Extract keys before any mutable borrows
-    let table_key = ctx.accounts.table.key();
-    let hand_data_key = ctx.accounts.hand_data.key();
-    
+pub fn start_hand(ctx: Context<StartHand>, _table_id: u64) -> Result<()> {
     let table = &mut ctx.accounts.table;
 
     // --- Validation ---
@@ -63,7 +59,7 @@ pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u
     // Note: Player seat data is now stored in separate PlayerSeat accounts
     // The individual PlayerSeat accounts will be updated in a separate instruction
     // or through a callback that has access to all the PlayerSeat accounts
-    
+
     // --- Rotate Dealer Button ---
     let mut next_dealer_pos = (table.dealer_position + 1) % MAX_PLAYERS as u8;
     while (table.occupied_seats & (1 << next_dealer_pos)) == 0 {
@@ -77,52 +73,26 @@ pub fn start_hand(ctx: Context<StartHand>, _table_id: u64, computation_offset: u
     msg!("start_hand: blinds: SB={}, BB={}, First={}", sb_pos, bb_pos, first_to_act_pos);
 
     // --- Collect Blinds ---
-    // Small Blind
-    let _sb_amount = table.small_blind;
     // Note: We can't directly modify the player's stack and bet information
     // because they're stored in the compact PlayerSeatInfo struct
     // In a real implementation, we would need to update the full player data
     // in a separate account or use a different approach
-    
+
     table.current_bet = table.big_blind;
     msg!("start_hand: blinds collected, pot={}", table.pot);
-    
-    // --- Queue Arcium Computation ---
-    msg!("start_hand: preparing args for queue_computation, players={}", table.player_count);
-    // Use a more memory-efficient approach to avoid stack overflow
-    let mut args = Vec::with_capacity(32 + MAX_PLAYERS); // Pre-allocate with reasonable capacity
-    
-    // Add arcium pubkey as individual u8 values
-    for byte in arcium_pubkeys.iter() {
-        args.push(Argument::PlaintextU8(*byte));
-    }
-    
-    // Add active players mask as individual bool values
-    for i in 0..MAX_PLAYERS {
-        let is_active = (table.occupied_seats & (1 << i)) != 0;
-        args.push(Argument::PlaintextBool(is_active));
-    }
 
-    // Drop the mutable borrow before calling queue_computation
-    let _ = table;
-    
-    msg!("start_hand: calling queue_computation with computation_offset={} ", computation_offset);
-    queue_computation(
-        ctx.accounts,
-        computation_offset,
-        args,
-        vec![
-            CallbackAccount { pubkey: table_key, is_writable: true },
-            CallbackAccount { pubkey: hand_data_key, is_writable: true },
-        ],
-        None,
-    )?;
-    msg!("start_hand: queue_computation dispatched");
+    // TODO: Add Arcium computation queuing once Arcium integration is properly set up
 
-    // Re-borrow table after queue_computation
-    let table = &mut ctx.accounts.table;
+    // For now, just set the table state and turn
     table.turn_position = first_to_act_pos;
     table.turn_started_at = Clock::get()?.unix_timestamp;
+    table.game_state = GameState::HandInProgress;
+
+    // Emit event for clients
+    emit!(HandStarted {
+        table_id: table.table_id,
+        hand_id: table.hand_id_counter,
+    });
 
     Ok(())
 }
@@ -152,51 +122,12 @@ fn find_blinds_and_first_actor(table: &Account<Table>) -> Result<(u8, u8, u8)> {
 }
 
 
-/// Callback logic for the `start_hand` instruction.
-// #[arcium_callback(encrypted_ix = "shuffle_and_deal")]
-pub fn shuffle_and_deal_callback(
-    ctx: Context<StartHandCallback>,
-    output: ComputationOutputs<ShuffleAndDealOutput>,
-) -> Result<()> {
-    let results = match output {
-        ComputationOutputs::Success(data) => data.field_0,
-        _ => return err!(AcesUnknownErrorCode::AbortedComputation),
-    };
 
-    let encrypted_deck = results.field_0;
-    let shuffle_commitment = results.field_1;
-    let _encrypted_hands_from_arcium = results.field_2;
 
-    // --- Update HandData Account ---
-    let hand_data = &mut ctx.accounts.hand_data;
-    hand_data.table_pubkey = ctx.accounts.table.key();
-    hand_data.hand_id = ctx.accounts.table.hand_id_counter;
-    hand_data.shuffle_commitment = shuffle_commitment.ciphertexts[0];
-    hand_data.encrypted_deck_ciphertexts = encrypted_deck.ciphertexts;
-    hand_data.encrypted_deck_nonce = encrypted_deck.nonce;
 
-    // In the current architecture, encrypted hands are not stored in the HandData account
-    // to avoid stack overflow issues. They would be stored in separate EncryptedHand accounts
-    // or passed directly to the Arcium computation as needed.
 
-    // --- Update Table Account ---
-    let table = &mut ctx.accounts.table;
-    table.game_state = GameState::HandInProgress;
-    
-    // Emit event for clients
-    // Event data can be large, so we may need to be selective.
-    // For now, let's just confirm the hand has started.
-    emit!(HandStarted {
-        table_id: table.table_id,
-        hand_id: table.hand_id_counter,
-    });
-
-    Ok(())
-}
-
-#[queue_computation_accounts("shuffle_and_deal", payer)]
 #[derive(Accounts)]
-#[instruction(table_id: u64, computation_offset: u64)]
+#[instruction(table_id: u64)]
 pub struct StartHand<'info> {
     #[account(
         mut,
@@ -214,51 +145,10 @@ pub struct StartHand<'info> {
         bump
     )]
     pub hand_data: Account<'info, HandData>,
-    
-    // Arcium accounts
-    #[account(
-        address = derive_mxe_pda!()
-    )]
-    pub mxe_account: Account<'info, MXEAccount>,
-    #[account(mut, address = derive_mempool_pda!())]
-    /// CHECK: Checked by Arcium program
-    pub mempool_account: UncheckedAccount<'info>,
-    #[account(mut, address = derive_execpool_pda!())]
-    /// CHECK: Checked by Arcium program
-    pub executing_pool: UncheckedAccount<'info>,
-    #[account(mut, address = derive_comp_pda!(computation_offset))]
-    /// CHECK: Checked by Arcium program
-    pub computation_account: UncheckedAccount<'info>,
-    #[account(address = derive_comp_def_pda!(crate::COMP_DEF_OFFSET_SHUFFLE_AND_DEAL))]
-    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
-    #[account(mut)]
-    pub cluster_account: Account<'info, Cluster>,
-    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
-    pub pool_account: Account<'info, FeePool>,
-    #[account(address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
-    pub clock_account: Account<'info, ClockAccount>,
     pub system_program: Program<'info, System>,
-    pub arcium_program: Program<'info, Arcium>,
 }
 
-#[callback_accounts("shuffle_and_deal", payer)]
-#[derive(Accounts)]
-pub struct StartHandCallback<'info> {
-    #[account(mut)]
-    pub payer: Signer<'info>,
-    pub arcium_program: Program<'info, Arcium>,
-    #[account(address = derive_comp_def_pda!(crate::COMP_DEF_OFFSET_SHUFFLE_AND_DEAL))]
-    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
-    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
-    /// CHECK: instructions_sysvar, checked by the account constraint
-    pub instructions_sysvar: AccountInfo<'info>,
-    
-    // Callback accounts specified in `queue_computation`
-    #[account(mut)]
-    pub table: Account<'info, Table>,
-    #[account(mut)]
-    pub hand_data: Account<'info, HandData>,
-}
+
 
 #[event]
 pub struct HandStarted {

@@ -3,21 +3,22 @@ const anchor = require("@coral-xyz/anchor");
 const { PublicKey, Keypair } = require("@solana/web3.js");
 const fs = require("fs");
 const os = require("os");
-const { 
-  getArciumProgAddress, 
-  getArciumAccountBaseSeed, 
-  getCompDefAccOffset,
-  getMXEAccAddress
+const {
+    getArciumProgAddress,
+    getArciumAccountBaseSeed,
+    getCompDefAccOffset,
+    getMXEAccAddress,
+    initCompDef: initCompDefClient
 } = require("@arcium-hq/client");
 
 async function main() {
     // Set up provider
     const provider = anchor.AnchorProvider.env();
     anchor.setProvider(provider);
-    
+
     // Load the program
     const program = anchor.workspace.AcesUnknown;
-    
+
     // Load owner keypair
     const owner = readKpJson(`${os.homedir()}/.config/solana/id.json`);
 
@@ -30,53 +31,21 @@ async function main() {
         { name: "reveal_community_cards", initMethod: "initRevealCommunityCardsCompDef" },
         { name: "evaluate_hands_and_payout", initMethod: "initEvaluateHandsAndPayoutCompDef" }
     ];
-    
+
     for (const circuit of circuits) {
-        await initCompDef(circuit, program, provider, owner);
+        await initCompDef(circuit, program, owner);
     }
 
     console.log("✅ Computation definitions initialization complete.");
 }
 
 // Helper function to initialize computation definitions
-async function initCompDef(circuit, program, provider, owner) {
+async function initCompDef(circuit, program, owner) {
     console.log(`Initializing CompDef for '${circuit.name}'...`);
-    
-    // Get the computation definition account PDA
-    const baseSeedCompDefAcc = getArciumAccountBaseSeed("ComputationDefinitionAccount");
-    const offsetBuffer = getCompDefAccOffset(circuit.name);
-    
-    const compDefPDA = PublicKey.findProgramAddressSync(
-        [baseSeedCompDefAcc, program.programId.toBuffer(), offsetBuffer],
-        getArciumProgAddress()
-    )[0];
 
     try {
-        await program.account.computationDefinitionAccount.fetch(compDefPDA);
-        console.log(`CompDef for '${circuit.name}' already initialized.`);
-        return;
-    } catch {
-        // Not initialized, proceed
-    }
-
-    // Get the MXE account
-    const mxeAccountPda = getMXEAccAddress(program.programId);
-    
-    try {
-        // Initialize the computation definition
-        console.log(`Calling initialization method '${circuit.initMethod}' for '${circuit.name}'...`);
-        
-        const tx = await program.methods[circuit.initMethod]()
-            .accounts({
-                payer: owner.publicKey,
-                mxeAccount: mxeAccountPda,
-                compDefAccount: compDefPDA,
-                arciumProgram: getArciumProgAddress(),
-                systemProgram: anchor.web3.SystemProgram.programId,
-            })
-            .signers([owner])
-            .rpc();
-            
+        // Use the new v0.3.0 initCompDef function from the client library
+        const tx = await initCompDefClient(program, owner, circuit.name, false);
         console.log(`Successfully initialized '${circuit.name}' computation definition.`);
         console.log(`Transaction signature: ${tx}`);
     } catch (error) {
