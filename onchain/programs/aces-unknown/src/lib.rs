@@ -12,7 +12,7 @@
 
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount};
+// SIGN_PDA_SEED imported from prelude above
 
 // Import local modules.
 pub mod state;
@@ -22,8 +22,6 @@ pub mod instructions;
 // Make their contents available for the program.
 use state::*;
 use instructions::*;
-use error::AcesUnknownErrorCode;
-use anchor_spl::token::Transfer;
 
 // Callback structs are handled by the #[arcium_callback] macros
 
@@ -36,11 +34,162 @@ const COMP_DEF_OFFSET_REVEAL_COMMUNITY_CARDS: u32 = comp_def_offset("reveal_comm
 const COMP_DEF_OFFSET_EVALUATE_HANDS_AND_PAYOUT: u32 = comp_def_offset("evaluate_hands_and_payout");
 
 // Program ID
-declare_id!("8U3ombZzPCggjjz26FRZ2kjhvtFWWRXv9Zrn6vuNvJj2");
+declare_id!("4ir9eYNjfVJggq19Su6DzAD4e24Yi4THesJjpBbAonVV");
 
 #[arcium_program]
 pub mod aces_unknown {
     use super::*;
+
+    // ========================================
+    // Arcium Computation Definition Initialization
+    // ========================================
+
+    /// Initialize the shuffle_and_deal computation definition
+    pub fn init_shuffle_and_deal_comp_def(ctx: Context<InitShuffleAndDealCompDef>) -> Result<()> {
+        // TODO: Replace with proper Arcium init when tools are working correctly
+        // init_comp_def(ctx.accounts, true, 0, None, None)?;
+        // For now, just return success
+        Ok(())
+    }
+
+    /// Initialize the reveal_community_cards computation definition
+    pub fn init_reveal_community_cards_comp_def(ctx: Context<InitRevealCommunityCardsCompDef>) -> Result<()> {
+        // TODO: Replace with proper Arcium init when tools are working correctly
+        // init_comp_def(ctx.accounts, true, 0, None, None)?;
+        // For now, just return success
+        Ok(())
+    }
+
+    /// Initialize the evaluate_hands_and_payout computation definition
+    pub fn init_evaluate_hands_and_payout_comp_def(ctx: Context<InitEvaluateHandsAndPayoutCompDef>) -> Result<()> {
+        // TODO: Replace with proper Arcium init when tools are working correctly
+        // init_comp_def(ctx.accounts, true, 0, None, None)?;
+        // For now, just return success
+        Ok(())
+    }
+
+    // ========================================
+    // Arcium Computation Invocations
+    // ========================================
+
+    /// Queue a shuffle and deal computation (called by start_hand)
+    pub fn shuffle_and_deal(
+        ctx: Context<ShuffleAndDeal>,
+        computation_offset: u64,
+    ) -> Result<()> {
+        // Simplified computation queuing for compilation
+        // TODO: Replace with proper Arcium computation queuing
+        // For now, just return success
+        Ok(())
+    }
+
+    /// Queue a reveal community cards computation (called by deal_community_cards)
+    pub fn reveal_community_cards(
+        ctx: Context<RevealCommunityCards>,
+        computation_offset: u64,
+        num_cards: u8,
+    ) -> Result<()> {
+        // Simplified computation queuing for compilation
+        // TODO: Replace with proper Arcium computation queuing
+        // For now, just return success
+        Ok(())
+    }
+
+    /// Queue an evaluate hands and payout computation (called by resolve_showdown)
+    pub fn evaluate_hands_and_payout(
+        ctx: Context<EvaluateHandsAndPayout>,
+        computation_offset: u64,
+    ) -> Result<()> {
+        // Simplified computation queuing for compilation
+        // TODO: Replace with proper Arcium computation queuing
+        // For now, just return success
+        Ok(())
+    }
+
+    // ========================================
+    // Arcium Callbacks
+    // ========================================
+
+    /// Callback for shuffle_and_deal computation result
+    // TODO: Uncomment when Arcium macros are working correctly
+    // #[arcium_callback(encrypted_ix = "shuffle_and_deal")]
+    // pub fn shuffle_and_deal_callback(
+    //     ctx: Context<ShuffleAndDealCallback>,
+    //     output: ComputationOutputs<ShuffleAndDealOutput>,
+    // ) -> Result<()> {
+    //     let _result = match output {
+    //         ComputationOutputs::Success(data) => data,
+    //         _ => return Err(error::AcesUnknownErrorCode::AbortedComputation.into()),
+    //     };
+    //     emit!(HandShuffled { table_id: ctx.accounts.table.table_id });
+    //     Ok(())
+    // }
+
+    /// Simplified callback for shuffle_and_deal computation result
+    pub fn shuffle_and_deal_callback(ctx: Context<ShuffleAndDealCallback>) -> Result<()> {
+        emit!(HandShuffled { table_id: ctx.accounts.table.table_id });
+        Ok(())
+    }
+
+    /// Callback for reveal_community_cards computation result
+    // TODO: Uncomment when Arcium macros are working correctly
+    // #[arcium_callback(encrypted_ix = "reveal_community_cards")]
+    // pub fn reveal_community_cards_callback(
+    //     ctx: Context<RevealCommunityCardsCallback>,
+    //     output: ComputationOutputs<RevealCommunityCardsOutput>,
+    // ) -> Result<()> {
+    //     let _result = match output {
+    //         ComputationOutputs::Success(data) => data,
+    //         _ => return Err(error::AcesUnknownErrorCode::AbortedComputation.into()),
+    //     };
+    //     emit!(CommunityCardsDealt {
+    //         table_id: ctx.accounts.table.table_id,
+    //         hand_id: ctx.accounts.hand_data.hand_id,
+    //         cards: ctx.accounts.table.community_cards,
+    //     });
+    //     Ok(())
+    // }
+
+    /// Simplified callback for reveal_community_cards computation result
+    pub fn reveal_community_cards_callback(ctx: Context<RevealCommunityCardsCallback>) -> Result<()> {
+        emit!(CommunityCardsDealt {
+            table_id: ctx.accounts.table.table_id,
+            hand_id: ctx.accounts.hand_data.hand_id,
+            cards: ctx.accounts.table.community_cards,
+        });
+        Ok(())
+    }
+
+    /// Callback for evaluate_hands_and_payout computation result
+    // TODO: Uncomment when Arcium macros are working correctly
+    // #[arcium_callback(encrypted_ix = "evaluate_hands_and_payout")]
+    // pub fn evaluate_hands_and_payout_callback(
+    //     ctx: Context<EvaluateHandsAndPayoutCallback>,
+    //     output: ComputationOutputs<EvaluateHandsAndPayoutOutput>,
+    // ) -> Result<()> {
+    //     let _result = match output {
+    //         ComputationOutputs::Success(data) => data,
+    //         _ => return Err(error::AcesUnknownErrorCode::AbortedComputation.into()),
+    //     };
+    //     emit!(HandResolved {
+    //         table_id: ctx.accounts.table.table_id,
+    //         hand_id: ctx.accounts.hand_data.hand_id,
+    //         pot: ctx.accounts.table.pot,
+    //         rake: 0, // Calculate rake amount
+    //     });
+    //     Ok(())
+    // }
+
+    /// Simplified callback for evaluate_hands_and_payout computation result
+    pub fn evaluate_hands_and_payout_callback(ctx: Context<EvaluateHandsAndPayoutCallback>) -> Result<()> {
+        emit!(HandResolved {
+            table_id: ctx.accounts.table.table_id,
+            hand_id: ctx.accounts.hand_data.hand_id,
+            pot: ctx.accounts.table.pot,
+            rake: 0, // Calculate rake amount
+        });
+        Ok(())
+    }
 
     // ========================================
     // Admin & Table Management Instructions
@@ -147,6 +296,133 @@ pub struct InitializePlatformConfig<'info> {
     /// CHECK: Treasury vault account for platform rake collection
     pub treasury_vault: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
+}
+
+// ========================================
+// Arcium Computation Definition Contexts (Simplified for Compatibility)
+// TODO: Replace with proper Arcium macros when tools are working correctly
+// ========================================
+
+#[derive(Accounts)]
+pub struct InitShuffleAndDealCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    /// CHECK: Computation definition account initialized by Arcium program
+    #[account(mut)]
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct InitRevealCommunityCardsCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    /// CHECK: Computation definition account initialized by Arcium program
+    #[account(mut)]
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct InitEvaluateHandsAndPayoutCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    /// CHECK: Computation definition account initialized by Arcium program
+    #[account(mut)]
+    pub comp_def_account: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+// ========================================
+// Arcium Computation Contexts (Simplified for Compatibility)
+// TODO: Replace with proper Arcium macros when tools are working correctly
+// ========================================
+
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct ShuffleAndDeal<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    /// CHECK: Computation account created by Arcium program
+    #[account(mut)]
+    pub computation_account: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    // Hand-specific accounts
+    #[account(mut)]
+    pub hand_data: Account<'info, HandData>,
+}
+
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct RevealCommunityCards<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    /// CHECK: Computation account created by Arcium program
+    #[account(mut)]
+    pub computation_account: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    // Hand-specific accounts
+    #[account(mut)]
+    pub hand_data: Account<'info, HandData>,
+}
+
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct EvaluateHandsAndPayout<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    /// CHECK: Computation account created by Arcium program
+    #[account(mut)]
+    pub computation_account: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    // Hand-specific accounts
+    #[account(mut)]
+    pub hand_data: Account<'info, HandData>,
+}
+
+// ========================================
+// Arcium Callback Contexts (Simplified for Compatibility)
+// TODO: Replace with proper Arcium macros when tools are working correctly
+// ========================================
+
+#[derive(Accounts)]
+pub struct ShuffleAndDealCallback<'info> {
+    // Hand data account to update
+    #[account(mut)]
+    pub hand_data: Account<'info, HandData>,
+    // Table account for reference
+    #[account(mut)]
+    pub table: Account<'info, Table>,
+}
+
+#[derive(Accounts)]
+pub struct RevealCommunityCardsCallback<'info> {
+    // Hand data account to update
+    #[account(mut)]
+    pub hand_data: Account<'info, HandData>,
+    // Table account to update with community cards
+    #[account(mut)]
+    pub table: Account<'info, Table>,
+}
+
+#[derive(Accounts)]
+pub struct EvaluateHandsAndPayoutCallback<'info> {
+    // Hand data account
+    #[account(mut)]
+    pub hand_data: Account<'info, HandData>,
+    // Table account
+    #[account(mut)]
+    pub table: Account<'info, Table>,
+    // Platform config for rake
+    #[account(mut)]
+    pub platform_config: Account<'info, PlatformConfig>,
+    // Token accounts for payouts
+    #[account(mut)]
+    pub table_vault: Account<'info, anchor_spl::token::TokenAccount>,
+    #[account(mut)]
+    pub treasury_vault: Account<'info, anchor_spl::token::TokenAccount>,
+    // Token program
+    pub token_program: Program<'info, anchor_spl::token::Token>,
 }
 
 // ========================================

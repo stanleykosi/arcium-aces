@@ -25,10 +25,7 @@
 //!    account, sets the game state to `HandInProgress`, and sets the turn to the first player to act.
 
 use anchor_lang::prelude::*;
-use arcium_anchor::prelude::*;
 use anchor_lang::Discriminator;
-use arcium_client::idl::arcium::accounts::Cluster;
-use crate::SignerAccount;
 use crate::state::{Table, HandData, GameState};
 use crate::error::AcesUnknownErrorCode;
 use crate::state::constants::MAX_PLAYERS;

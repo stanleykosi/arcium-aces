@@ -22,10 +22,7 @@
 //!    and `HandData` (with the new encrypted deck) accounts.
 
 use anchor_lang::prelude::*;
-use arcium_anchor::prelude::*;
 use anchor_lang::Discriminator;
-use arcium_client::idl::arcium::accounts::Cluster;
-use crate::SignerAccount;
 use crate::state::{Table, HandData, GameState, BettingRound, Card};
 use crate::error::AcesUnknownErrorCode;
 
@@ -135,4 +132,9 @@ pub struct CommunityCardsDealt {
     pub table_id: u64,
     pub hand_id: u64,
     pub cards: [Option<Card>; 5],
+}
+
+#[event]
+pub struct HandShuffled {
+    pub table_id: u64,
 }

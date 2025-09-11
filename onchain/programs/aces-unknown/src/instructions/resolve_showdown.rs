@@ -27,14 +27,10 @@
 //!    `HandData` account to refund the rent.
 
 use anchor_lang::prelude::*;
-use arcium_anchor::prelude::*;
 use anchor_lang::Discriminator;
-use arcium_client::idl::arcium::accounts::Cluster;
-use crate::SignerAccount;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use crate::state::{Table, HandData, GameState, BettingRound, PlatformConfig};
 use crate::error::AcesUnknownErrorCode;
-use crate::state::constants::MAX_PLAYERS;
 
 
 pub fn resolve_showdown(ctx: Context<ResolveShowdown>, _table_id: u64) -> Result<()> {

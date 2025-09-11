@@ -16,7 +16,7 @@ async function main() {
     anchor.setProvider(provider);
     
     // Load the program with explicit devnet program ID
-    const programId = new PublicKey("8U3ombZzPCggjjz26FRZ2kjhvtFWWRXv9Zrn6vuNvJj2");
+    const programId = new PublicKey("4ir9eYNjfVJggq19Su6DzAD4e24Yi4THesJjpBbAonVV");
     const idl = require("../target/idl/aces_unknown.json");
     const program = new anchor.Program(idl, programId, provider);
     

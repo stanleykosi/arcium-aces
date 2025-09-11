@@ -28,12 +28,13 @@ arcium-anchor = { version = "0.3.0" }
 
 [profile.release]
 overflow-checks = true
-lto = "fat"
+lto = true
 codegen-units = 1
-opt-level = "z"
-strip = "debuginfo"
+opt-level = 3
+strip = true
 panic = "abort"
 stack-protector = false
+debug = false
 
 [profile.dev]
 overflow-checks = true
